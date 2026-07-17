@@ -1,26 +1,17 @@
 const mongoose = require('mongoose');
 
 const supplierSchema = new mongoose.Schema({
-  name: {
-    type: String,
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true
   },
-  phone: {
-    type: String
-  },
-  city: {
-    type: String
-  },
-  gstNumber: {
-    type: String
-  },
-  notes: {
-    type: String
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  }
+  name: { type: String, required: true },
+  phone: { type: String },
+  city: { type: String },
+  gstNumber: { type: String },
+  notes: { type: String },
+  isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Supplier', supplierSchema);

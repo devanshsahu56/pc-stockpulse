@@ -21,14 +21,14 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error(err));
 
-// Public routes — no auth needed
+// Public routes
 app.use('/api/auth', authRoutes);
 
-// Protected routes — auth required
+// Protected routes
 app.use('/api/products', authMiddleware, productRoutes);
 app.use('/api/customers', authMiddleware, customerRoutes);
 app.use('/api/sales', authMiddleware, saleRoutes);
-app.use('/api/suppliers', authMiddleware, supplierRoutes);
+app.use('/api/suppliers', authMiddleware, supplierRoutes); 
 
 app.get('/', (req, res) => res.send('FMCG Backend Running'));
 

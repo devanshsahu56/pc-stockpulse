@@ -5,12 +5,12 @@ const Supplier = require('../models/Supplier');
 // Search suppliers
 router.get('/search/:query', async (req, res) => {
   try {
-    const query = req.params.query;
     const suppliers = await Supplier.find({
+      ownerId: req.user.userId,
       isActive: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { city: { $regex: query, $options: 'i' } }
+        { name: { $regex: req.params.query, $options: 'i' } },
+        { city: { $regex: req.params.query, $options: 'i' } }
       ]
     });
     res.json(suppliers);
@@ -19,10 +19,10 @@ router.get('/search/:query', async (req, res) => {
   }
 });
 
-// Get all active suppliers
+// Get all suppliers
 router.get('/', async (req, res) => {
   try {
-    const suppliers = await Supplier.find({ isActive: true }).sort({ name: 1 });
+    const suppliers = await Supplier.find({ ownerId: req.user.userId, isActive: true }).sort({ name: 1 });
     res.json(suppliers);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 // Create supplier
 router.post('/', async (req, res) => {
   try {
-    const supplier = new Supplier(req.body);
+    const supplier = new Supplier({ ...req.body, ownerId: req.user.userId });
     await supplier.save();
     res.status(201).json(supplier);
   } catch (err) {
@@ -43,8 +43,8 @@ router.post('/', async (req, res) => {
 // Update supplier
 router.put('/:id', async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndUpdate(
-      req.params.id,
+    const supplier = await Supplier.findOneAndUpdate(
+      { _id: req.params.id, ownerId: req.user.userId },
       req.body,
       { returnDocument: 'after' }
     );
@@ -58,8 +58,8 @@ router.put('/:id', async (req, res) => {
 // Soft delete supplier
 router.delete('/:id', async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndUpdate(
-      req.params.id,
+    const supplier = await Supplier.findOneAndUpdate(
+      { _id: req.params.id, ownerId: req.user.userId },
       { isActive: false },
       { returnDocument: 'after' }
     );

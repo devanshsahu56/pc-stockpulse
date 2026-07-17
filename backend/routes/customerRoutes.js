@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const Customer = require('../models/Customer');
 
-// Search customers by name or shop name (must be above /:id)
+// Search customers
 router.get('/search/:query', async (req, res) => {
   try {
-    const query = req.params.query;
     const customers = await Customer.find({
+      ownerId: req.user.userId,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { shopName: { $regex: query, $options: 'i' } }
+        { name: { $regex: req.params.query, $options: 'i' } },
+        { shopName: { $regex: req.params.query, $options: 'i' } }
       ]
     });
     res.json(customers);
@@ -18,10 +18,10 @@ router.get('/search/:query', async (req, res) => {
   }
 });
 
-// Create a new customer
+// Create customer
 router.post('/', async (req, res) => {
   try {
-    const customer = new Customer(req.body);
+    const customer = new Customer({ ...req.body, ownerId: req.user.userId });
     await customer.save();
     res.status(201).json(customer);
   } catch (err) {
@@ -29,20 +29,20 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get all customers (sorted by highest purchases)
+// Get all customers
 router.get('/', async (req, res) => {
   try {
-    const customers = await Customer.find().sort({ totalPurchases: -1 });
+    const customers = await Customer.find({ ownerId: req.user.userId }).sort({ totalPurchases: -1 });
     res.json(customers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get a single customer by ID
+// Get single customer
 router.get('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findOne({ _id: req.params.id, ownerId: req.user.userId });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
     res.json(customer);
   } catch (err) {
@@ -50,11 +50,11 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Update customer details
+// Update customer
 router.put('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndUpdate(
-      req.params.id,
+    const customer = await Customer.findOneAndUpdate(
+      { _id: req.params.id, ownerId: req.user.userId },
       req.body,
       { returnDocument: 'after' }
     );
@@ -65,10 +65,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete a customer
+// Delete customer
 router.delete('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findOneAndDelete({ _id: req.params.id, ownerId: req.user.userId });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
     res.json({ message: 'Customer deleted' });
   } catch (err) {
