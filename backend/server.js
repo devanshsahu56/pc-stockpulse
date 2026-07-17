@@ -15,7 +15,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://wholesalehub-backend-mqby.onrender.com',
-    'https://pcwholescalehub.space/'
+    'https://pcwholescalehub.space/',
     /\.vercel\.app$/
   ],
   credentials: true
