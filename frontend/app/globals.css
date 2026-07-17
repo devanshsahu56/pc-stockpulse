@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #09090B;
+  --surface: #18181B;
+  --surface-2: #1C1C1F;
+  --border: #27272A;
+  --text: #FAFAFA;
+  --text-muted: #71717A;
+  --text-dim: #3F3F46;
+  --accent: #6366F1;
+  --accent-hover: #4F46E5;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --partial: #F59E0B;
+  --nav-height: 52px;
+  --bottom-nav-height: 60px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: #09090B !important;
+}
+
+body {
+  background: #09090B !important;
+  color: #FAFAFA !important;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Smooth transitions */
+* { transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+
+/* Input base */
+input, select, textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  -webkit-appearance: none;
+}
+
+input::placeholder, textarea::placeholder { color: var(--text-dim); }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+select option { background: var(--surface); color: var(--text); }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+table { width: 100%; border-collapse: collapse; }
+
+/* Mobile padding for bottom nav */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: var(--bottom-nav-height);
+  }
+}
+
+/* Print styles */
+@media print {
+  nav { display: none !important; }
+  body { background: white !important; color: black !important; padding-bottom: 0 !important; }
+  button { display: none !important; }
+  #bill-content { box-shadow: none !important; }
+}
+/* Mobile responsive tables */
+@media (max-width: 768px) {
+  .desktop-table { display: none !important; }
+  .mobile-cards { display: flex !important; }
+
+  /* Reduce padding on mobile */
+  main {
+    padding: 16px 12px !important;
+  }
+
+  /* Stack grids on mobile */
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-cards { display: none !important; }
+  .desktop-table { display: block !important; }
+}
