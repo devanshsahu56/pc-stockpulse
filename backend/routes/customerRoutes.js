@@ -1,16 +1,16 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const Customer = require('../models/Customer');
+const Customer = require("../models/Customer");
 
 // Search customers
-router.get('/search/:query', async (req, res) => {
+router.get("/search/:query", async (req, res) => {
   try {
     const customers = await Customer.find({
       ownerId: req.user.userId,
       $or: [
-        { name: { $regex: req.params.query, $options: 'i' } },
-        { shopName: { $regex: req.params.query, $options: 'i' } }
-      ]
+        { name: { $regex: req.params.query, $options: "i" } },
+        { shopName: { $regex: req.params.query, $options: "i" } },
+      ],
     });
     res.json(customers);
   } catch (err) {
@@ -19,7 +19,7 @@ router.get('/search/:query', async (req, res) => {
 });
 
 // Create customer
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const customer = new Customer({ ...req.body, ownerId: req.user.userId });
     await customer.save();
@@ -30,9 +30,11 @@ router.post('/', async (req, res) => {
 });
 
 // Get all customers
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const customers = await Customer.find({ ownerId: req.user.userId }).sort({ totalPurchases: -1 });
+    const customers = await Customer.find({ ownerId: req.user.userId }).sort({
+      totalPurchases: -1,
+    });
     res.json(customers);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -40,10 +42,13 @@ router.get('/', async (req, res) => {
 });
 
 // Get single customer
-router.get('/:id', async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const customer = await Customer.findOne({ _id: req.params.id, ownerId: req.user.userId });
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    const customer = await Customer.findOne({
+      _id: req.params.id,
+      ownerId: req.user.userId,
+    });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
     res.json(customer);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -51,14 +56,14 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update customer
-router.put('/:id', async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, ownerId: req.user.userId },
       req.body,
-      { returnDocument: 'after' }
+      { returnDocument: "after" },
     );
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
     res.json(customer);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -66,11 +71,14 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete customer
-router.delete('/:id', async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    const customer = await Customer.findOneAndDelete({ _id: req.params.id, ownerId: req.user.userId });
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
-    res.json({ message: 'Customer deleted' });
+    const customer = await Customer.findOneAndDelete({
+      _id: req.params.id,
+      ownerId: req.user.userId,
+    });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    res.json({ message: "Customer deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

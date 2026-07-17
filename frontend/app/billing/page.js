@@ -521,22 +521,7 @@ export default function BillingPage() {
         </div>
 
         <div style={{ display: "flex", gap: "12px" }}>
-          <button
-            onClick={() => setSuccessBill(null)}
-            style={{
-              flex: 1,
-              background: "transparent",
-              color: "var(--danger)",
-              border: "1px solid var(--danger)",
-              borderRadius: "8px",
-              padding: "12px",
-              fontSize: "14px",
-              fontWeight: "600",
-              cursor: "pointer",
-            }}
-          >
-            ✕ Cancel / Close
-          </button>
+          
           <button
             onClick={() => window.print()}
             style={{
