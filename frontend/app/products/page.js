@@ -1748,40 +1748,68 @@ export default function ProductsPage() {
                 </Select>
               </div>
             </div>
-            <div
-              style={{
-                marginTop: "16px",
-                paddingTop: "16px",
-                borderTop: "1px solid var(--border)",
-              }}
-            >
-              <label style={labelStyle}>Selling Type</label>
-              <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
-                {[
-                  { val: true, label: "Loose & Full Case" },
-                  { val: false, label: "Full Case Only" },
-                ].map((opt) => (
-                  <label
-                    key={String(opt.val)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      checked={editProduct.soldLoose === opt.val}
-                      onChange={() =>
-                        setEditProduct({ ...editProduct, soldLoose: opt.val })
-                      }
-                    />
-                    <span style={{ fontSize: "13px" }}>{opt.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <div style={{ marginBottom: "16px" }}>
+  <label
+    style={{
+      fontSize: "11px",
+      color: "var(--text-muted)",
+      textTransform: "uppercase",
+      letterSpacing: "0.05em",
+      display: "block",
+      marginBottom: "8px",
+    }}
+  >
+    Selling Type
+  </label>
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "8px",
+      background: "var(--surface-2)",
+      padding: "4px",
+      borderRadius: "8px",
+      border: "1px solid var(--border)",
+    }}
+  >
+    <button
+      type="button"
+      onClick={() => setEditProduct({ ...editProduct, soldLoose: true })}
+      style={{
+        padding: "8px 12px",
+        borderRadius: "6px",
+        border: "none",
+        fontSize: "13px",
+        fontWeight: "500",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        background: editProduct?.soldLoose ? "var(--accent)" : "transparent",
+        color: editProduct?.soldLoose ? "white" : "var(--text-muted)",
+        transition: "all 0.15s ease",
+      }}
+    >
+      Loose & Full Case
+    </button>
+    <button
+      type="button"
+      onClick={() => setEditProduct({ ...editProduct, soldLoose: false })}
+      style={{
+        padding: "8px 12px",
+        borderRadius: "6px",
+        border: "none",
+        fontSize: "13px",
+        fontWeight: "500",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        background: !editProduct?.soldLoose ? "var(--accent)" : "transparent",
+        color: !editProduct?.soldLoose ? "white" : "var(--text-muted)",
+        transition: "all 0.15s ease",
+      }}
+    >
+      Full Case Only
+    </button>
+  </div>
+</div>
             <p
               style={{
                 fontSize: "11px",
