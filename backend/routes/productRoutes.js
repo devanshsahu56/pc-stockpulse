@@ -103,6 +103,7 @@ router.post('/:id/receive', async (req, res) => {
 
     product.stock += totalUnits;
     product.costPrice = costPricePerUnit;
+    product.costPricePerCase = costPricePerCase;
 
     if (supplierId && !product.suppliers.includes(supplierId)) {
       product.suppliers.push(supplierId);
@@ -135,37 +136,6 @@ router.patch('/:id/suppliers', async (req, res) => {
   }
 });
 
-// Add variant
-router.post('/:id/variants', async (req, res) => {
-  try {
-    const { name, quantity, price } = req.body;
-    if (!name || !quantity || !price) {
-      return res.status(400).json({ error: 'name, quantity and price are required' });
-    }
-    const product = await Product.findOne({ _id: req.params.id, ownerId: req.user.userId });
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-
-    product.variants.push({ name, quantity, price });
-    await product.save();
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Delete variant
-router.delete('/:id/variants/:variantId', async (req, res) => {
-  try {
-    const product = await Product.findOne({ _id: req.params.id, ownerId: req.user.userId });
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-
-    product.variants = product.variants.filter(v => v._id.toString() !== req.params.variantId);
-    await product.save();
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Restock
 router.patch('/:id/restock', async (req, res) => {

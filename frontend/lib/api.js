@@ -45,9 +45,6 @@ export const productAPI = {
   receive: (id, data) => API.post(`/products/${id}/receive`, data),
   updateSuppliers: (id, data) => API.patch(`/products/${id}/suppliers`, data),
   delete: (id) => API.delete(`/products/${id}`),
-  addVariant: (id, data) => API.post(`/products/${id}/variants`, data),
-  deleteVariant: (id, variantId) =>
-    API.delete(`/products/${id}/variants/${variantId}`),
 };
 
 export const customerAPI = {

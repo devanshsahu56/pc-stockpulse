@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { customerAPI, productAPI, saleAPI } from "../../lib/api";
 
 const Card = ({ children, style = {} }) => (
@@ -91,8 +91,10 @@ export default function BillingPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
   const [productSearch, setProductSearch] = useState("");
   const [productResults, setProductResults] = useState([]);
+  
   const [billItems, setBillItems] = useState([]);
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [amountPaid, setAmountPaid] = useState("");
@@ -138,30 +140,30 @@ export default function BillingPage() {
   };
 
   const addToBill = (product) => {
-    if (billItems.find((i) => i.productId === product._id)) return;
-    const fullCaseVariant = product.variants?.[0] || null;
+    if (billItems.some((i) => i.productId === product._id)) return;
+
+    const loosePrice = product.sellingPricePerPiece || product.sellingPrice || 0;
+    const casePrice = product.sellingPricePerCase || 0;
+    const looseMrp = product.mrp || 0;
+    const caseMrp = product.mrpPerCase || product.mrp * (product.unitsPerCase || 1) || 0;
+
     const defaultVariant = product.soldLoose ? "loose" : "fullcase";
-    const defaultPrice = product.soldLoose
-      ? product.sellingPrice
-      : fullCaseVariant?.price || product.sellingPrice;
-    const defaultMrp = product.soldLoose
-      ? product.mrp
-      : fullCaseVariant
-        ? product.mrp * fullCaseVariant.quantity
-        : product.mrp;
-    setBillItems([
-      ...billItems,
+    const defaultPrice = product.soldLoose ? loosePrice : casePrice;
+    const defaultMrp = product.soldLoose ? looseMrp : caseMrp;
+
+    setBillItems((prev) => [
+      ...prev,
       {
         productId: product._id,
         productName: product.name,
         brand: product.brand,
-        mrp: product.mrp,
-        sellingPrice: product.sellingPrice,
+        mrp: looseMrp,
+        mrpPerCase: caseMrp,
+        sellingPricePerPiece: loosePrice,
+        sellingPricePerCase: casePrice,
         soldLoose: product.soldLoose,
         unitsPerCase: product.unitsPerCase || 1,
         stock: product.stock,
-        variants: product.variants || [],
-        fullCaseVariant,
         selectedVariant: defaultVariant,
         unitPrice: defaultPrice,
         displayMrp: defaultMrp,
@@ -174,65 +176,60 @@ export default function BillingPage() {
     setProductResults([]);
   };
 
-  const handleVariantChange = (productId, variantType) => {
-    setBillItems(
-      billItems.map((item) => {
+  const handleVariantChange = (productId, newVariant) => {
+    setBillItems((prev) =>
+      prev.map((item) => {
         if (item.productId !== productId) return item;
-        if (variantType === "loose")
-          return {
-            ...item,
-            selectedVariant: "loose",
-            unitPrice: item.sellingPrice,
-            displayMrp: item.mrp,
-          };
-        const variant = item.fullCaseVariant;
+        const isLoose = newVariant === "loose";
         return {
           ...item,
-          selectedVariant: "fullcase",
-          unitPrice: variant?.price || item.sellingPrice,
-          displayMrp: variant ? item.mrp * variant.quantity : item.mrp,
+          selectedVariant: newVariant,
+          unitPrice: isLoose ? item.sellingPricePerPiece : item.sellingPricePerCase,
+          displayMrp: isLoose ? item.mrp : item.mrpPerCase,
         };
-      }),
+      })
     );
   };
 
   const updateItem = (productId, key, value) => {
-    setBillItems(
-      billItems.map((item) =>
-        item.productId === productId ? { ...item, [key]: value } : item,
-      ),
+    setBillItems((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, [key]: value } : item))
     );
   };
 
-  const removeFromBill = (productId) =>
-    setBillItems(billItems.filter((i) => i.productId !== productId));
-
-  const getLineTotal = (item) => {
-    const lineTotal =
-      (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
-    const disc = Number(item.discountValue) || 0;
-    const discAmount =
-      item.discountType === "percentage" ? (lineTotal * disc) / 100 : disc;
-    return Math.max(0, lineTotal - discAmount);
+  const removeFromBill = (productId) => {
+    setBillItems((prev) => prev.filter((i) => i.productId !== productId));
   };
 
-  const getDiscountAmount = (item) => {
-    const lineTotal =
-      (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
-    const disc = Number(item.discountValue) || 0;
-    return item.discountType === "percentage" ? (lineTotal * disc) / 100 : disc;
+  const calculateItemTotals = (item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unitPrice) || 0;
+    const discVal = Number(item.discountValue) || 0;
+    
+    const lineTotal = qty * price;
+    const discountAmount =
+      item.discountType === "percentage" ? (lineTotal * discVal) / 100 : discVal;
+    
+    return {
+      lineTotal,
+      discountAmount,
+      finalTotal: Math.max(0, lineTotal - discountAmount),
+    };
   };
 
-  const subtotal = billItems.reduce(
-    (sum, item) =>
-      sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
-    0,
-  );
-  const totalDiscount = billItems.reduce(
-    (sum, item) => sum + getDiscountAmount(item),
-    0,
-  );
-  const totalAmount = subtotal - totalDiscount;
+  const totals = useMemo(() => {
+    return billItems.reduce(
+      (acc, item) => {
+        const { lineTotal, discountAmount } = calculateItemTotals(item);
+        acc.subtotal += lineTotal;
+        acc.totalDiscount += discountAmount;
+        return acc;
+      },
+      { subtotal: 0, totalDiscount: 0 }
+    );
+  }, [billItems]);
+
+  const totalAmount = totals.subtotal - totals.totalDiscount;
 
   const handleSubmitBill = async () => {
     if (!isWalkIn && !selectedCustomer) {
@@ -268,10 +265,7 @@ export default function BillingPage() {
         items: billItems.map((item) => ({
           productId: item.productId,
           variantName: item.selectedVariant === "loose" ? "Loose" : "Full Case",
-          variantQuantity:
-            item.selectedVariant === "loose"
-              ? 1
-              : item.fullCaseVariant?.quantity || 1,
+          variantQuantity: item.selectedVariant === "loose" ? 1 : item.unitsPerCase || 1,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
           discountType: item.discountType,
@@ -282,19 +276,12 @@ export default function BillingPage() {
         notes,
       });
       setSuccessBill(res.data);
-      setSelectedCustomer(null);
-      setBillItems([]);
-      setNotes("");
-      setPaymentStatus("paid");
-      setAmountPaid("");
-      setIsWalkIn(false);
     } catch (err) {
       alert("Error: " + err.response?.data?.error);
     }
     setLoading(false);
   };
 
-  // Success Screen
   if (successBill) {
     return (
       <div
@@ -351,9 +338,7 @@ export default function BillingPage() {
               <p style={{ fontWeight: "500", color: "#111" }}>
                 {new Date().toLocaleDateString("en-IN")}
               </p>
-              <p
-                style={{ color: "#666", marginTop: "8px", marginBottom: "4px" }}
-              >
+              <p style={{ color: "#666", marginTop: "8px", marginBottom: "4px" }}>
                 Payment
               </p>
               <p
@@ -431,22 +416,14 @@ export default function BillingPage() {
             <tbody>
               {successBill.items.map((item, i) => (
                 <tr key={i} style={{ borderTop: "1px solid #eee" }}>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      color: "#666",
-                      textAlign: "right",
-                    }}
-                  >
+                  <td style={{ padding: "8px 10px", color: "#666", textAlign: "right" }}>
                     {i + 1}
                   </td>
                   <td style={{ padding: "8px 10px" }}>
                     <p style={{ fontWeight: "500", color: "#111" }}>
                       {item.productName}
                     </p>
-                    <p style={{ color: "#666", fontSize: "11px" }}>
-                      {item.brand}
-                    </p>
+                    <p style={{ color: "#666", fontSize: "11px" }}>{item.brand}</p>
                   </td>
                   <td style={{ padding: "8px 10px", color: "#666" }}>
                     {item.variantName}
@@ -457,24 +434,12 @@ export default function BillingPage() {
                   <td style={{ padding: "8px 10px", textAlign: "right" }}>
                     ₹{item.unitPrice}
                   </td>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      textAlign: "right",
-                      color: "#dc2626",
-                    }}
-                  >
+                  <td style={{ padding: "8px 10px", textAlign: "right", color: "#dc2626" }}>
                     {item.discountAmount > 0
                       ? `- ₹${item.discountAmount.toFixed(2)}`
                       : "—"}
                   </td>
-                  <td
-                    style={{
-                      padding: "8px 10px",
-                      textAlign: "right",
-                      fontWeight: "600",
-                    }}
-                  >
+                  <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>
                     ₹{item.totalPrice.toLocaleString()}
                   </td>
                 </tr>
@@ -493,13 +458,7 @@ export default function BillingPage() {
               paddingTop: "12px",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                width: "200px",
-              }}
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", width: "200px" }}>
               <span style={{ color: "#666" }}>Subtotal</span>
               <span>₹{successBill.subtotal.toLocaleString()}</span>
             </div>
@@ -563,6 +522,22 @@ export default function BillingPage() {
 
         <div style={{ display: "flex", gap: "12px" }}>
           <button
+            onClick={() => setSuccessBill(null)}
+            style={{
+              flex: 1,
+              background: "transparent",
+              color: "var(--danger)",
+              border: "1px solid var(--danger)",
+              borderRadius: "8px",
+              padding: "12px",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            ✕ Cancel / Close
+          </button>
+          <button
             onClick={() => window.print()}
             style={{
               flex: 1,
@@ -579,7 +554,15 @@ export default function BillingPage() {
             🖨 Print / Save PDF
           </button>
           <button
-            onClick={() => setSuccessBill(null)}
+            onClick={() => {
+              setSuccessBill(null);
+              setSelectedCustomer(null);
+              setBillItems([]);
+              setNotes("");
+              setPaymentStatus("paid");
+              setAmountPaid("");
+              setIsWalkIn(false);
+            }}
             style={{
               flex: 1,
               background: "var(--success)",
@@ -613,13 +596,10 @@ export default function BillingPage() {
 
       {/* Customer */}
       <Card>
-        <p
-          style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}
-        >
+        <p style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}>
           Customer
         </p>
 
-        {/* Walk-in Toggle */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
           <button
             onClick={() => {
@@ -775,9 +755,7 @@ export default function BillingPage() {
                       (e.currentTarget.style.background = "transparent")
                     }
                   >
-                    <p style={{ fontWeight: "500", fontSize: "13px" }}>
-                      {c.name}
-                    </p>
+                    <p style={{ fontWeight: "500", fontSize: "13px" }}>{c.name}</p>
                     <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                       {c.shopName}
                     </p>
@@ -791,9 +769,7 @@ export default function BillingPage() {
 
       {/* Products */}
       <Card>
-        <p
-          style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}
-        >
+        <p style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}>
           Products
         </p>
         <div style={{ position: "relative", marginBottom: "16px" }}>
@@ -834,9 +810,7 @@ export default function BillingPage() {
                   }
                 >
                   <div>
-                    <p style={{ fontWeight: "500", fontSize: "13px" }}>
-                      {p.name}
-                    </p>
+                    <p style={{ fontWeight: "500", fontSize: "13px" }}>{p.name}</p>
                     <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>
                       {p.brand}
                     </p>
@@ -885,8 +859,128 @@ export default function BillingPage() {
           <>
             {/* Desktop Table */}
             <div className="desktop-links" style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                {/* your existing table code stays here exactly as is */}
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left" }}>
+                    <th style={{ padding: "10px" }}>Product</th>
+                    <th style={{ padding: "10px" }}>Variant</th>
+                    <th style={{ padding: "10px", width: "100px" }}>Price (₹)</th>
+                    <th style={{ padding: "10px", width: "80px" }}>Qty</th>
+                    <th style={{ padding: "10px", width: "140px" }}>Discount</th>
+                    <th style={{ padding: "10px", textAlign: "right" }}>Total</th>
+                    <th style={{ padding: "10px", width: "40px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billItems.map((item) => {
+                    const { finalTotal } = calculateItemTotals(item);
+                    return (
+                      <tr key={item.productId} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "10px" }}>
+                          <p style={{ fontWeight: "600" }}>{item.productName}</p>
+                          <p style={{ color: "var(--text-muted)", fontSize: "11px" }}>{item.brand}</p>
+                        </td>
+                        <td style={{ padding: "10px" }}>
+                          {!item.soldLoose ? (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                background: "rgba(245,158,11,0.1)",
+                                color: "var(--warning)",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                fontWeight: "500",
+                              }}
+                            >
+                              Full Case
+                            </span>
+                          ) : (
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <button
+                                onClick={() => handleVariantChange(item.productId, "loose")}
+                                style={{
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  border: "none",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  fontWeight: "500",
+                                  background:
+                                    item.selectedVariant === "loose" ? "var(--accent)" : "var(--border)",
+                                  color: "white",
+                                }}
+                              >
+                                Loose
+                              </button>
+                              <button
+                                onClick={() => handleVariantChange(item.productId, "fullcase")}
+                                style={{
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  border: "none",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  fontWeight: "500",
+                                  background:
+                                    item.selectedVariant === "fullcase" ? "var(--accent)" : "var(--border)",
+                                  color: "white",
+                                }}
+                              >
+                                Case
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: "10px" }}>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(item.productId, "unitPrice", e.target.value)}
+                          />
+                        </td>
+                        <td style={{ padding: "10px" }}>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(item.productId, "quantity", e.target.value)}
+                            style={{ textAlign: "center" }}
+                          />
+                        </td>
+                        <td style={{ padding: "10px" }}>
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            <Select
+                              value={item.discountType}
+                              onChange={(e) => updateItem(item.productId, "discountType", e.target.value)}
+                              style={{ width: "50px", padding: "6px 4px" }}
+                            >
+                              <option value="flat">₹</option>
+                              <option value="percentage">%</option>
+                            </Select>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={item.discountValue}
+                              onChange={(e) => updateItem(item.productId, "discountValue", e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
+                        </td>
+                        <td style={{ padding: "10px", textAlign: "right", fontWeight: "600", color: "var(--success)" }}>
+                          ₹{finalTotal.toLocaleString()}
+                        </td>
+                        <td style={{ padding: "10px", textAlign: "center" }}>
+                          <button
+                            onClick={() => removeFromBill(item.productId)}
+                            style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "16px" }}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
 
@@ -895,199 +989,179 @@ export default function BillingPage() {
               className="mobile-only"
               style={{ display: "flex", flexDirection: "column", gap: "8px" }}
             >
-              {billItems.map((item) => (
-                <div
-                  key={item.productId}
-                  style={{
-                    background: "var(--surface-2)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    padding: "12px",
-                  }}
-                >
-                  {/* Product name + remove button */}
+              {billItems.map((item) => {
+                const { finalTotal } = calculateItemTotals(item);
+                return (
                   <div
+                    key={item.productId}
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <div>
-                      <p style={{ fontWeight: "600", fontSize: "14px" }}>
-                        {item.productName}
-                      </p>
-                      <p
-                        style={{ color: "var(--text-muted)", fontSize: "12px" }}
-                      >
-                        {item.brand}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => removeFromBill(item.productId)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--danger)",
-                        fontSize: "20px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  {/* Price + Qty side by side */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "8px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    <div>
-                      <label
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--text-muted)",
-                          textTransform: "uppercase",
-                          display: "block",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Price (₹)
-                      </label>
-                      <input
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          updateItem(
-                            item.productId,
-                            "unitPrice",
-                            e.target.value,
-                          )
-                        }
-                        style={{
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text)",
-                          borderRadius: "6px",
-                          padding: "6px 8px",
-                          fontSize: "13px",
-                          outline: "none",
-                          width: "100%",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--text-muted)",
-                          textTransform: "uppercase",
-                          display: "block",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Quantity
-                      </label>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateItem(item.productId, "quantity", e.target.value)
-                        }
-                        style={{
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text)",
-                          borderRadius: "6px",
-                          padding: "6px 8px",
-                          fontSize: "13px",
-                          outline: "none",
-                          width: "100%",
-                          textAlign: "center",
-                        }}
-                        min="1"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Discount + Total */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "10px",
+                      padding: "12px",
                     }}
                   >
                     <div
                       style={{
                         display: "flex",
-                        gap: "4px",
+                        justifyContent: "space-between",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <div>
+                        <p style={{ fontWeight: "600", fontSize: "14px" }}>
+                          {item.productName}
+                        </p>
+                        <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                          {item.brand}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeFromBill(item.productId)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--danger)",
+                          fontSize: "20px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ marginBottom: "8px" }}>
+                      <label
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          display: "block",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Type
+                      </label>
+                      {!item.soldLoose ? (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            background: "rgba(245,158,11,0.1)",
+                            color: "var(--warning)",
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          Full Case Only
+                        </span>
+                      ) : (
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          <button
+                            onClick={() => handleVariantChange(item.productId, "loose")}
+                            style={{
+                              flex: 1,
+                              padding: "6px",
+                              borderRadius: "6px",
+                              border: "none",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              background:
+                                item.selectedVariant === "loose"
+                                  ? "var(--accent)"
+                                  : "var(--border)",
+                              color: "white",
+                            }}
+                          >
+                            Loose
+                          </button>
+                          <button
+                            onClick={() => handleVariantChange(item.productId, "fullcase")}
+                            style={{
+                              flex: 1,
+                              padding: "6px",
+                              borderRadius: "6px",
+                              border: "none",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              background:
+                                item.selectedVariant === "fullcase"
+                                  ? "var(--accent)"
+                                  : "var(--border)",
+                              color: "white",
+                            }}
+                          >
+                            Full Case
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "8px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <div>
+                        <label style={labelStyle}>Price (₹)</label>
+                        <Input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(item.productId, "unitPrice", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Quantity</label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.productId, "quantity", e.target.value)}
+                          style={{ textAlign: "center" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
                         alignItems: "center",
                       }}
                     >
-                      <select
-                        value={item.discountType}
-                        onChange={(e) =>
-                          updateItem(
-                            item.productId,
-                            "discountType",
-                            e.target.value,
-                          )
-                        }
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                        <Select
+                          value={item.discountType}
+                          onChange={(e) => updateItem(item.productId, "discountType", e.target.value)}
+                          style={{ width: "50px", padding: "6px 4px", fontSize: "12px" }}
+                        >
+                          <option value="flat">₹</option>
+                          <option value="percentage">%</option>
+                        </Select>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={item.discountValue}
+                          onChange={(e) => updateItem(item.productId, "discountValue", e.target.value)}
+                          placeholder="Disc"
+                          style={{ width: "70px", padding: "6px 8px", fontSize: "12px" }}
+                        />
+                      </div>
+                      <p
                         style={{
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text)",
-                          borderRadius: "6px",
-                          padding: "6px 4px",
-                          fontSize: "12px",
-                          outline: "none",
-                          width: "50px",
+                          fontWeight: "700",
+                          fontSize: "16px",
+                          color: "var(--success)",
                         }}
                       >
-                        <option value="flat">₹</option>
-                        <option value="percentage">%</option>
-                      </select>
-                      <input
-                        type="number"
-                        value={item.discountValue}
-                        onChange={(e) =>
-                          updateItem(
-                            item.productId,
-                            "discountValue",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Disc"
-                        style={{
-                          background: "var(--surface)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text)",
-                          borderRadius: "6px",
-                          padding: "6px 8px",
-                          fontSize: "12px",
-                          outline: "none",
-                          width: "70px",
-                        }}
-                        min="0"
-                      />
+                        ₹{finalTotal.toLocaleString()}
+                      </p>
                     </div>
-                    <p
-                      style={{
-                        fontWeight: "700",
-                        fontSize: "16px",
-                        color: "var(--success)",
-                      }}
-                    >
-                      ₹{getLineTotal(item).toLocaleString()}
-                    </p>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -1095,9 +1169,7 @@ export default function BillingPage() {
 
       {/* Payment */}
       <Card>
-        <p
-          style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}
-        >
+        <p style={{ fontWeight: "600", fontSize: "14px", marginBottom: "12px" }}>
           Payment
         </p>
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -1178,11 +1250,7 @@ export default function BillingPage() {
                     fontSize: "13px",
                   }}
                 >
-                  ₹
-                  {Math.max(
-                    0,
-                    totalAmount - (Number(amountPaid) || 0),
-                  ).toLocaleString()}
+                  ₹{Math.max(0, totalAmount - (Number(amountPaid) || 0)).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -1219,9 +1287,9 @@ export default function BillingPage() {
               }}
             >
               <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString()}</span>
+              <span>₹{totals.subtotal.toLocaleString()}</span>
             </div>
-            {totalDiscount > 0 && (
+            {totals.totalDiscount > 0 && (
               <div
                 style={{
                   display: "flex",
@@ -1232,7 +1300,7 @@ export default function BillingPage() {
                 }}
               >
                 <span>Discount</span>
-                <span>- ₹{totalDiscount.toFixed(2)}</span>
+                <span>- ₹{totals.totalDiscount.toFixed(2)}</span>
               </div>
             )}
             <div

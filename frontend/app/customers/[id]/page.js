@@ -92,8 +92,10 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState(null);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expandedSale, setExpandedSale] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  
+  // Modals state
+  const [billModal, setBillModal] = useState(null);
   const [paymentModal, setPaymentModal] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
@@ -358,7 +360,10 @@ export default function CustomerDetailPage() {
                     key={h}
                     style={{
                       padding: "12px 16px",
-                      textAlign: "left",
+                      textAlign:
+                        h === "Total" || h === "Paid" || h === "Remaining"
+                          ? "right"
+                          : "left",
                       fontSize: "11px",
                       fontWeight: "600",
                       color: "var(--text-muted)",
@@ -387,296 +392,132 @@ export default function CustomerDetailPage() {
                 </tr>
               ) : (
                 filteredSales.map((sale) => (
-                  <React.Fragment key={sale._id}>
-                    <tr
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "var(--surface-2)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                    >
-                      <td style={{ padding: "12px 16px" }}>
-                        <p style={{ fontSize: "13px", fontWeight: "500" }}>
-                          {new Date(sale.createdAt).toLocaleDateString("en-IN")}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: "11px",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          {new Date(sale.createdAt).toLocaleTimeString(
-                            "en-IN",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )}
-                        </p>
-                      </td>
-                      <td
+                  <tr
+                    key={sale._id}
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "var(--surface-2)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    <td style={{ padding: "12px 16px" }}>
+                      <p style={{ fontSize: "13px", fontWeight: "500" }}>
+                        {new Date(sale.createdAt).toLocaleDateString("en-IN")}
+                      </p>
+                      <p
                         style={{
-                          padding: "12px 16px",
+                          fontSize: "11px",
                           color: "var(--text-muted)",
-                          fontSize: "13px",
                         }}
                       >
-                        {sale.items.length} item(s)
-                      </td>
-                      <td
+                        {new Date(sale.createdAt).toLocaleTimeString(
+                          "en-IN",
+                          { hour: "2-digit", minute: "2-digit" },
+                        )}
+                      </p>
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        color: "var(--text-muted)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {sale.items.length} item(s)
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        fontWeight: "600",
+                        fontSize: "13px",
+                        textAlign: "right",
+                      }}
+                    >
+                      ₹{sale.totalAmount.toLocaleString()}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        color: "var(--success)",
+                        fontWeight: "500",
+                        fontSize: "13px",
+                        textAlign: "right",
+                      }}
+                    >
+                      ₹{sale.amountPaid.toLocaleString()}
+                    </td>
+                    <td
+                      style={{
+                        padding: "12px 16px",
+                        color: "var(--danger)",
+                        fontWeight: "500",
+                        fontSize: "13px",
+                        textAlign: "right",
+                      }}
+                    >
+                      {sale.remainingAmount > 0
+                        ? `₹${sale.remainingAmount.toLocaleString()}`
+                        : "—"}
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span
                         style={{
-                          padding: "12px 16px",
-                          fontWeight: "600",
-                          fontSize: "13px",
-                        }}
-                      >
-                        ₹{sale.totalAmount.toLocaleString()}
-                      </td>
-                      <td
-                        style={{
-                          padding: "12px 16px",
-                          color: "var(--success)",
+                          fontSize: "11px",
+                          padding: "3px 8px",
+                          borderRadius: "4px",
+                          background: `${statusColors[sale.paymentStatus]}18`,
+                          color: statusColors[sale.paymentStatus],
+                          border: `1px solid ${statusColors[sale.paymentStatus]}30`,
                           fontWeight: "500",
-                          fontSize: "13px",
+                          textTransform: "capitalize",
                         }}
                       >
-                        ₹{sale.amountPaid.toLocaleString()}
-                      </td>
-                      <td
-                        style={{
-                          padding: "12px 16px",
-                          color: "var(--danger)",
-                          fontWeight: "500",
-                          fontSize: "13px",
-                        }}
-                      >
-                        {sale.remainingAmount > 0
-                          ? `₹${sale.remainingAmount.toLocaleString()}`
-                          : "—"}
-                      </td>
-                      <td style={{ padding: "12px 16px" }}>
-                        <span
+                        {sale.paymentStatus}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={() => setBillModal(sale)}
                           style={{
+                            background: "var(--surface-2)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text)",
+                            borderRadius: "6px",
+                            padding: "4px 10px",
                             fontSize: "11px",
-                            padding: "3px 8px",
-                            borderRadius: "4px",
-                            background: `${statusColors[sale.paymentStatus]}18`,
-                            color: statusColors[sale.paymentStatus],
-                            border: `1px solid ${statusColors[sale.paymentStatus]}30`,
-                            fontWeight: "500",
-                            textTransform: "capitalize",
+                            fontWeight: "600",
+                            cursor: "pointer",
                           }}
                         >
-                          {sale.paymentStatus}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 16px" }}>
-                        <div style={{ display: "flex", gap: "4px" }}>
+                          📄 View Bill
+                        </button>
+                        {sale.paymentStatus !== "paid" && (
                           <button
-                            onClick={() =>
-                              setExpandedSale(
-                                expandedSale === sale._id ? null : sale._id,
-                              )
-                            }
+                            onClick={() => {
+                              setPaymentModal(sale);
+                              setPaymentAmount("");
+                              setPaymentNote("");
+                            }}
                             style={{
-                              background: "none",
+                              background: "var(--success)",
+                              color: "white",
                               border: "none",
-                              color: "var(--accent)",
-                              fontSize: "12px",
+                              borderRadius: "6px",
+                              padding: "4px 10px",
+                              fontSize: "11px",
+                              fontWeight: "600",
                               cursor: "pointer",
-                              padding: 0,
                             }}
                           >
-                            {expandedSale === sale._id ? "Hide" : "View"}
+                            + Pay
                           </button>
-                          {sale.paymentStatus !== "paid" && (
-                            <button
-                              onClick={() => {
-                                setPaymentModal(sale);
-                                setPaymentAmount("");
-                                setPaymentNote("");
-                              }}
-                              style={{
-                                background: "var(--success)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                padding: "3px 8px",
-                                fontSize: "11px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              + Pay
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {expandedSale === sale._id && (
-                      <tr
-                        style={{
-                          background: "var(--surface-2)",
-                          borderBottom: "1px solid var(--border)",
-                        }}
-                      >
-                        <td colSpan="7" style={{ padding: "16px 24px" }}>
-                          <table
-                            style={{
-                              width: "100%",
-                              borderCollapse: "collapse",
-                              marginBottom: "12px",
-                            }}
-                          >
-                            <thead>
-                              <tr>
-                                {[
-                                  "Product",
-                                  "Variant",
-                                  "Qty",
-                                  "Price",
-                                  "Discount",
-                                  "Total",
-                                ].map((h) => (
-                                  <th
-                                    key={h}
-                                    style={{
-                                      padding: "6px 8px",
-                                      textAlign:
-                                        h === "Product" || h === "Variant"
-                                          ? "left"
-                                          : "right",
-                                      fontSize: "11px",
-                                      color: "var(--text-muted)",
-                                      textTransform: "uppercase",
-                                    }}
-                                  >
-                                    {h}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sale.items.map((item, i) => (
-                                <tr
-                                  key={i}
-                                  style={{
-                                    borderTop: "1px solid var(--border)",
-                                  }}
-                                >
-                                  <td
-                                    style={{ padding: "8px", fontSize: "13px" }}
-                                  >
-                                    <p>{item.productName}</p>
-                                    <p
-                                      style={{
-                                        fontSize: "11px",
-                                        color: "var(--text-muted)",
-                                      }}
-                                    >
-                                      {item.brand}
-                                    </p>
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: "13px",
-                                      color: "var(--text-muted)",
-                                    }}
-                                  >
-                                    {item.variantName}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: "13px",
-                                      textAlign: "right",
-                                    }}
-                                  >
-                                    {item.quantity}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: "13px",
-                                      textAlign: "right",
-                                    }}
-                                  >
-                                    ₹{item.unitPrice}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: "13px",
-                                      textAlign: "right",
-                                      color: "var(--danger)",
-                                    }}
-                                  >
-                                    {item.discountAmount > 0
-                                      ? `- ₹${item.discountAmount.toFixed(2)}`
-                                      : "—"}
-                                  </td>
-                                  <td
-                                    style={{
-                                      padding: "8px",
-                                      fontSize: "13px",
-                                      textAlign: "right",
-                                      fontWeight: "600",
-                                    }}
-                                  >
-                                    ₹{item.totalPrice.toLocaleString()}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {sale.paymentHistory?.length > 0 && (
-                            <div>
-                              <p
-                                style={{
-                                  fontWeight: "600",
-                                  fontSize: "12px",
-                                  color: "var(--text-muted)",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.05em",
-                                  marginBottom: "8px",
-                                }}
-                              >
-                                Payment History
-                              </p>
-                              {sale.paymentHistory.map((p, i) => (
-                                <div
-                                  key={i}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    padding: "6px 0",
-                                    borderTop: "1px solid var(--border)",
-                                    fontSize: "13px",
-                                  }}
-                                >
-                                  <span style={{ color: "var(--text-muted)" }}>
-                                    {new Date(p.date).toLocaleDateString(
-                                      "en-IN",
-                                    )}
-                                  </span>
-                                  <span style={{ color: "var(--text-muted)" }}>
-                                    {p.note}
-                                  </span>
-                                  <span
-                                    style={{
-                                      color: "var(--success)",
-                                      fontWeight: "600",
-                                    }}
-                                  >
-                                    ₹{p.amount.toLocaleString()}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -838,26 +679,20 @@ export default function CustomerDetailPage() {
                 {/* Actions */}
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
-                    onClick={() =>
-                      setExpandedSale(
-                        expandedSale === sale._id ? null : sale._id,
-                      )
-                    }
+                    onClick={() => setBillModal(sale)}
                     style={{
                       flex: 1,
-                      background: "var(--border)",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
                       color: "var(--text)",
-                      border: "none",
                       borderRadius: "8px",
                       padding: "8px",
                       fontSize: "12px",
                       cursor: "pointer",
-                      fontWeight: "500",
+                      fontWeight: "600",
                     }}
                   >
-                    {expandedSale === sale._id
-                      ? "Hide Details"
-                      : "👁 View Details"}
+                    📄 View Bill
                   </button>
                   {sale.paymentStatus !== "paid" && (
                     <button
@@ -875,110 +710,329 @@ export default function CustomerDetailPage() {
                         padding: "8px",
                         fontSize: "12px",
                         cursor: "pointer",
-                        fontWeight: "500",
+                        fontWeight: "600",
                       }}
                     >
                       💰 Add Payment
                     </button>
                   )}
                 </div>
-
-                {/* Expanded Details */}
-                {expandedSale === sale._id && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "12px",
-                      background: "var(--surface-2)",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        color: "var(--text-muted)",
-                        textTransform: "uppercase",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Items
-                    </p>
-                    {sale.items.map((item, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "6px 0",
-                          borderBottom: "1px solid var(--border)",
-                          fontSize: "13px",
-                        }}
-                      >
-                        <div>
-                          <p style={{ fontWeight: "500" }}>
-                            {item.productName}
-                          </p>
-                          <p
-                            style={{
-                              fontSize: "11px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {item.variantName} × {item.quantity}
-                          </p>
-                        </div>
-                        <p style={{ fontWeight: "600" }}>
-                          ₹{item.totalPrice.toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                    {sale.paymentHistory?.length > 0 && (
-                      <div style={{ marginTop: "10px" }}>
-                        <p
-                          style={{
-                            fontWeight: "600",
-                            fontSize: "12px",
-                            color: "var(--text-muted)",
-                            textTransform: "uppercase",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          Payments
-                        </p>
-                        {sale.paymentHistory.map((p, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              fontSize: "12px",
-                              padding: "4px 0",
-                            }}
-                          >
-                            <span style={{ color: "var(--text-muted)" }}>
-                              {new Date(p.date).toLocaleDateString("en-IN")} ·{" "}
-                              {p.note}
-                            </span>
-                            <span
-                              style={{
-                                color: "var(--success)",
-                                fontWeight: "600",
-                              }}
-                            >
-                              ₹{p.amount.toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             ))
           )}
         </div>
       </Card>
+
+      {/* Bill View Modal */}
+      {billModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "680px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            <div
+              id="bill-content"
+              style={{
+                background: "white",
+                color: "#111",
+                borderRadius: "12px",
+                padding: "32px",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <div
+                style={{
+                  textAlign: "center",
+                  borderBottom: "1px solid #eee",
+                  paddingBottom: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#111" }}>
+                  PC StockPulse
+                </h1>
+                <p style={{ color: "#666", fontSize: "13px" }}>
+                  FMCG Wholesale Distributor, Bhopal
+                </p>
+              </div>
+              
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "20px",
+                  fontSize: "13px",
+                }}
+              >
+                <div>
+                  <p style={{ color: "#666", marginBottom: "4px" }}>Bill To</p>
+                  <p style={{ fontWeight: "600", color: "#111" }}>
+                    {customer.name}
+                  </p>
+                  <p style={{ color: "#444" }}>{customer.shopName}</p>
+                  <p style={{ color: "#444" }}>{customer.phone}</p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ color: "#666", marginBottom: "4px" }}>Date</p>
+                  <p style={{ fontWeight: "500", color: "#111" }}>
+                    {new Date(billModal.createdAt).toLocaleDateString("en-IN")}
+                  </p>
+                  <p style={{ color: "#666", marginTop: "8px", marginBottom: "4px" }}>
+                    Payment
+                  </p>
+                  <p
+                    style={{
+                      fontWeight: "600",
+                      color:
+                        billModal.paymentStatus === "paid"
+                          ? "#16a34a"
+                          : billModal.paymentStatus === "unpaid"
+                            ? "#dc2626"
+                            : "#d97706",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {billModal.paymentStatus}
+                  </p>
+                  {billModal.paymentStatus === "partial" && (
+                    <>
+                      <p style={{ color: "#666", fontSize: "12px" }}>
+                        Paid: ₹{billModal.amountPaid.toLocaleString()}
+                      </p>
+                      <p style={{ color: "#dc2626", fontSize: "12px" }}>
+                        Due: ₹{billModal.remainingAmount.toLocaleString()}
+                      </p>
+                    </>
+                  )}
+                  {billModal.paymentStatus === "unpaid" && (
+                    <p style={{ color: "#dc2626", fontSize: "12px" }}>
+                      Due: ₹{billModal.totalAmount.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "13px",
+                  marginBottom: "16px",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f5f5f5" }}>
+                    {[
+                      "#",
+                      "Product",
+                      "Variant",
+                      "Qty",
+                      "Price",
+                      "Discount",
+                      "Total",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "8px 10px",
+                          textAlign:
+                            h === "#" ||
+                            h === "Qty" ||
+                            h === "Price" ||
+                            h === "Discount" ||
+                            h === "Total"
+                              ? "right"
+                              : "left",
+                          color: "#444",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {billModal.items.map((item, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid #eee" }}>
+                      <td style={{ padding: "8px 10px", color: "#666", textAlign: "right" }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <p style={{ fontWeight: "500", color: "#111" }}>
+                          {item.productName}
+                        </p>
+                        <p style={{ color: "#666", fontSize: "11px" }}>{item.brand}</p>
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#666" }}>
+                        {item.variantName}
+                      </td>
+                      <td style={{ padding: "8px 10px", textAlign: "right" }}>
+                        {item.quantity}
+                      </td>
+                      <td style={{ padding: "8px 10px", textAlign: "right" }}>
+                        ₹{item.unitPrice}
+                      </td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", color: "#dc2626" }}>
+                        {item.discountAmount > 0
+                          ? `- ₹${item.discountAmount.toFixed(2)}`
+                          : "—"}
+                      </td>
+                      <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>
+                        ₹{item.totalPrice.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: "4px",
+                  fontSize: "13px",
+                  borderTop: "1px solid #eee",
+                  paddingTop: "12px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", width: "200px" }}>
+                  <span style={{ color: "#666" }}>Subtotal</span>
+                  <span>
+                    ₹{billModal.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0).toLocaleString()}
+                  </span>
+                </div>
+                {billModal.items.some(i => i.discountAmount > 0) && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      width: "200px",
+                      color: "#dc2626",
+                    }}
+                  >
+                    <span>Discount</span>
+                    <span>
+                      - ₹{billModal.items.reduce((s, i) => s + (i.discountAmount || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "200px",
+                    fontWeight: "700",
+                    fontSize: "16px",
+                    borderTop: "1px solid #eee",
+                    paddingTop: "8px",
+                  }}
+                >
+                  <span>Total</span>
+                  <span style={{ color: "#16a34a" }}>
+                    ₹{billModal.totalAmount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {billModal.notes && (
+                <p
+                  style={{
+                    color: "#666",
+                    fontSize: "12px",
+                    marginTop: "16px",
+                    borderTop: "1px solid #eee",
+                    paddingTop: "12px",
+                  }}
+                >
+                  Notes: {billModal.notes}
+                </p>
+              )}
+              
+              {billModal.paymentHistory?.length > 0 && (
+                <div style={{ marginTop: "16px", borderTop: "1px solid #eee", paddingTop: "12px" }}>
+                  <p style={{ fontWeight: "600", fontSize: "11px", color: "#666", textTransform: "uppercase", marginBottom: "6px" }}>
+                    Payment History
+                  </p>
+                  {billModal.paymentHistory.map((p, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#444", padding: "2px 0" }}>
+                      <span>{new Date(p.date).toLocaleDateString("en-IN")} · {p.note}</span>
+                      <span style={{ color: "#16a34a", fontWeight: "600" }}>₹{p.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div
+                style={{
+                  textAlign: "center",
+                  marginTop: "20px",
+                  color: "#aaa",
+                  fontSize: "11px",
+                  borderTop: "1px solid #eee",
+                  paddingTop: "12px",
+                }}
+              >
+                Thank you for your business! · Generated by PC StockPulse
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setBillModal(null)}
+                style={{
+                  flex: 1,
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                ✕ Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                style={{
+                  flex: 1,
+                  background: "var(--accent)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                🖨 Print / Save PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {paymentModal && (
@@ -993,7 +1047,7 @@ export default function CustomerDetailPage() {
             zIndex: 200,
           }}
         >
-          <Card style={{ width: "100%", maxWidth: "420px",margin: '0 12px' }}>
+          <Card style={{ width: "100%", maxWidth: "420px", margin: "0 12px" }}>
             <p
               style={{
                 fontWeight: "600",

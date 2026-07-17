@@ -114,26 +114,26 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [expandedProduct, setExpandedProduct] = useState(null);
-  const [newVariant, setNewVariant] = useState({
-    name: "",
-    quantity: "",
-    price: "",
-  });
   const [editProduct, setEditProduct] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: "",
     brand: "",
     category: "",
-    mrp: "",
-    costPrice: "",
-    sellingPrice: "",
     soldLoose: true,
+    // Loose + Full Case fields
     unitsPerCase: "",
+    mrp: "",
+    mrpPerCase: "",
+    sellingPricePerPiece: "",
+    sellingPricePerCase: "",
+    costPricePerCase: "",
+    // Full Case Only fields
+    buyingPricePerCase: "",
+    sellingPrice: "",
+    // Common
     initialStockCases: "",
     initialStockLoose: "",
     reorderThreshold: 10,
-    casePrice: "",
   });
   const [restockModal, setRestockModal] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
@@ -207,44 +207,83 @@ export default function ProductsPage() {
   };
 
   const handleAddProduct = async () => {
-    if (
-      !newProduct.name ||
-      !newProduct.brand ||
-      !newProduct.mrp ||
-      !newProduct.sellingPrice
-    ) {
-      alert("Please fill in all required fields");
+    if (!newProduct.name || !newProduct.brand) {
+      alert("Please fill in product name and brand");
       return;
     }
-    let initialStock = 0;
-    const upc = Number(newProduct.unitsPerCase) || 1;
-    if (newProduct.soldLoose) {
-      initialStock =
-        (Number(newProduct.initialStockCases) || 0) * upc +
-        (Number(newProduct.initialStockLoose) || 0);
-    } else {
-      initialStock = (Number(newProduct.initialStockCases) || 0) * upc;
-    }
-    const productData = {
+
+    let productData = {
       name: newProduct.name,
       brand: newProduct.brand,
       category: newProduct.category,
-      mrp: Number(newProduct.mrp),
-      costPrice: Number(newProduct.costPrice) || 0,
-      sellingPrice: Number(newProduct.sellingPrice),
       soldLoose: newProduct.soldLoose,
-      unitsPerCase: upc,
-      stock: initialStock,
       reorderThreshold: Number(newProduct.reorderThreshold),
+      ownerId: undefined,
       variants: [],
     };
-    if (newProduct.unitsPerCase && newProduct.casePrice) {
-      productData.variants.push({
-        name: "Full Case",
-        quantity: upc,
-        price: Number(newProduct.casePrice),
-      });
+
+    if (newProduct.soldLoose) {
+      // Loose + Full Case validation
+      if (
+        !newProduct.costPricePerCase ||
+        !newProduct.unitsPerCase ||
+        !newProduct.mrp ||
+        !newProduct.sellingPricePerCase ||
+        !newProduct.sellingPricePerPiece
+      ) {
+        alert("Please fill in all required fields");
+        return;
+      }
+
+      const upc = Number(newProduct.unitsPerCase);
+      const mrpPerCase = Number(newProduct.mrp) * upc;
+      const costPerPiece = Number(newProduct.costPricePerCase) / upc;
+
+      productData = {
+        ...productData,
+        unitsPerCase: upc,
+        mrp: Number(newProduct.mrp),
+        mrpPerCase,
+        sellingPricePerPiece: Number(newProduct.sellingPricePerPiece),
+        sellingPricePerCase: Number(newProduct.sellingPricePerCase),
+        costPricePerCase: Number(newProduct.costPricePerCase),
+        costPrice: costPerPiece,
+        sellingPrice: Number(newProduct.sellingPricePerPiece),
+        // Auto add Full Case variant
+        variants: [
+          {
+            name: "Full Case",
+            quantity: upc,
+            price: Number(newProduct.sellingPricePerCase),
+          },
+        ],
+      };
+
+      // Calculate stock
+      const cases = Number(newProduct.initialStockCases) || 0;
+      const loose = Number(newProduct.initialStockLoose) || 0;
+      productData.stock = cases * upc + loose;
+    } else {
+      // Full Case Only validation
+      if (!newProduct.buyingPricePerCase || !newProduct.sellingPrice) {
+        alert("Please fill in buying and selling price");
+        return;
+      }
+
+      productData = {
+        ...productData,
+        unitsPerCase: 1,
+        buyingPricePerCase: Number(newProduct.buyingPricePerCase),
+        costPricePerCase: Number(newProduct.buyingPricePerCase),
+        costPrice: Number(newProduct.buyingPricePerCase),
+        sellingPrice: Number(newProduct.sellingPrice),
+        sellingPricePerCase: Number(newProduct.sellingPrice),
+      };
+
+      const cases = Number(newProduct.initialStockCases) || 0;
+      productData.stock = cases;
     }
+
     try {
       await productAPI.create(productData);
       setShowAddForm(false);
@@ -252,15 +291,18 @@ export default function ProductsPage() {
         name: "",
         brand: "",
         category: "",
-        mrp: "",
-        costPrice: "",
-        sellingPrice: "",
         soldLoose: true,
         unitsPerCase: "",
+        mrp: "",
+        mrpPerCase: "",
+        sellingPricePerPiece: "",
+        sellingPricePerCase: "",
+        costPricePerCase: "",
+        buyingPricePerCase: "",
+        sellingPrice: "",
         initialStockCases: "",
         initialStockLoose: "",
         reorderThreshold: 10,
-        casePrice: "",
       });
       fetchProducts();
     } catch (err) {
@@ -319,49 +361,31 @@ export default function ProductsPage() {
 
   const handleEditProduct = async () => {
     try {
+      const upc = Number(editProduct.unitsPerCase) || 1;
+      const mrpPerCase = Number(editProduct.mrp) * upc;
+      const costPerPiece = editProduct.costPricePerCase
+        ? Number(editProduct.costPricePerCase) / upc
+        : 0;
+
       await productAPI.update(editProduct._id, {
         name: editProduct.name,
         brand: editProduct.brand,
         category: editProduct.category,
-        mrp: Number(editProduct.mrp),
-        costPrice: Number(editProduct.costPrice) || 0,
-        sellingPrice: Number(editProduct.sellingPrice),
+        mrp: Number(editProduct.mrp) || 0,
+        mrpPerCase,
+        costPricePerCase: Number(editProduct.costPricePerCase) || 0,
+        costPrice: costPerPiece,
+        sellingPricePerPiece: Number(editProduct.sellingPricePerPiece) || 0,
+        sellingPricePerCase: Number(editProduct.sellingPricePerCase) || 0,
+        sellingPrice: Number(editProduct.sellingPricePerPiece) || 0,
         soldLoose: editProduct.soldLoose,
-        unitsPerCase: Number(editProduct.unitsPerCase) || 1,
+        unitsPerCase: upc,
         reorderThreshold: Number(editProduct.reorderThreshold),
       });
       setEditProduct(null);
       fetchProducts();
     } catch (err) {
       alert("Error: " + err.response?.data?.error);
-    }
-  };
-
-  const handleAddVariant = async (productId) => {
-    if (!newVariant.name || !newVariant.quantity || !newVariant.price) {
-      alert("Fill all variant fields");
-      return;
-    }
-    try {
-      await productAPI.addVariant(productId, {
-        name: newVariant.name,
-        quantity: Number(newVariant.quantity),
-        price: Number(newVariant.price),
-      });
-      setNewVariant({ name: "", quantity: "", price: "" });
-      fetchProducts();
-    } catch (err) {
-      alert("Error: " + err.response?.data?.error);
-    }
-  };
-
-  const handleDeleteVariant = async (productId, variantId) => {
-    if (!confirm("Delete variant?")) return;
-    try {
-      await productAPI.deleteVariant(productId, variantId);
-      fetchProducts();
-    } catch (err) {
-      alert("Error deleting variant");
     }
   };
 
@@ -426,7 +450,16 @@ export default function ProductsPage() {
           >
             Add New Product
           </p>
-          <div style={formGrid}>
+
+          {/* Basic Info */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "12px",
+              marginBottom: "16px",
+            }}
+          >
             <div>
               <label style={labelStyle}>Product Name *</label>
               <Input
@@ -464,39 +497,6 @@ export default function ProductsPage() {
               </Select>
             </div>
             <div>
-              <label style={labelStyle}>MRP per unit (₹) *</label>
-              <Input
-                type="number"
-                placeholder="e.g. 60"
-                value={newProduct.mrp}
-                onChange={(e) =>
-                  setNewProduct({ ...newProduct, mrp: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Cost Price per unit (₹)</label>
-              <Input
-                type="number"
-                placeholder="e.g. 38"
-                value={newProduct.costPrice}
-                onChange={(e) =>
-                  setNewProduct({ ...newProduct, costPrice: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Selling Price per unit (₹) *</label>
-              <Input
-                type="number"
-                placeholder="e.g. 45"
-                value={newProduct.sellingPrice}
-                onChange={(e) =>
-                  setNewProduct({ ...newProduct, sellingPrice: e.target.value })
-                }
-              />
-            </div>
-            <div>
               <label style={labelStyle}>Reorder Threshold</label>
               <Input
                 type="number"
@@ -511,151 +511,575 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          {/* Selling Type */}
+          {/* Product Type */}
           <div
             style={{
-              marginTop: "16px",
+              marginBottom: "20px",
               paddingTop: "16px",
               borderTop: "1px solid var(--border)",
             }}
           >
-            <label style={labelStyle}>Selling Type</label>
-            <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
+            <label style={labelStyle}>Product Type *</label>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+                marginTop: "8px",
+              }}
+            >
               {[
-                { val: true, label: "Loose & Full Case" },
-                { val: false, label: "Full Case Only" },
+                {
+                  val: true,
+                  label: "Loose + Full Case",
+                  desc: "Sold both per piece and per case",
+                  icon: "📦",
+                },
+                {
+                  val: false,
+                  label: "Full Case Only",
+                  desc: "Sold only as full cases",
+                  icon: "🏭",
+                },
               ].map((opt) => (
-                <label
+                <div
                   key={String(opt.val)}
+                  onClick={() =>
+                    setNewProduct({ ...newProduct, soldLoose: opt.val })
+                  }
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
+                    padding: "14px",
+                    borderRadius: "10px",
                     cursor: "pointer",
+                    border: `2px solid ${newProduct.soldLoose === opt.val ? "var(--accent)" : "var(--border)"}`,
+                    background:
+                      newProduct.soldLoose === opt.val
+                        ? "rgba(99,102,241,0.08)"
+                        : "var(--surface-2)",
                   }}
                 >
-                  <input
-                    type="radio"
-                    checked={newProduct.soldLoose === opt.val}
-                    onChange={() =>
-                      setNewProduct({ ...newProduct, soldLoose: opt.val })
-                    }
-                  />
-                  <span style={{ fontSize: "13px" }}>{opt.label}</span>
-                </label>
+                  <p style={{ fontSize: "20px", marginBottom: "4px" }}>
+                    {opt.icon}
+                  </p>
+                  <p
+                    style={{
+                      fontWeight: "600",
+                      fontSize: "13px",
+                      color:
+                        newProduct.soldLoose === opt.val
+                          ? "var(--accent)"
+                          : "var(--text)",
+                    }}
+                  >
+                    {opt.label}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--text-muted)",
+                      marginTop: "2px",
+                    }}
+                  >
+                    {opt.desc}
+                  </p>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Case Details */}
-          <div
-            style={{
-              marginTop: "16px",
-              paddingTop: "16px",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <label style={labelStyle}>Case Details</label>
-            <div style={{ ...formGrid, marginTop: "8px" }}>
-              <div>
-                <label style={labelStyle}>Units per Case</label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 24"
-                  value={newProduct.unitsPerCase}
-                  onChange={(e) =>
-                    setNewProduct({
-                      ...newProduct,
-                      unitsPerCase: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Full Case Selling Price (₹)</label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 950"
-                  value={newProduct.casePrice}
-                  onChange={(e) =>
-                    setNewProduct({ ...newProduct, casePrice: e.target.value })
-                  }
-                />
-              </div>
-              {newProduct.unitsPerCase && newProduct.mrp && (
+          {/* Loose + Full Case Fields */}
+          {newProduct.soldLoose && (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
+              {/* Case Info */}
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
                 <p
                   style={{
-                    gridColumn: "span 2",
-                    fontSize: "12px",
-                    color: "var(--text-muted)",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                    color: "var(--accent)",
                   }}
                 >
-                  Full case MRP = ₹
-                  {Number(newProduct.mrp) * Number(newProduct.unitsPerCase)}
+                  📦 Case Information
                 </p>
-              )}
-            </div>
-          </div>
-
-          {/* Initial Stock */}
-          <div
-            style={{
-              marginTop: "16px",
-              paddingTop: "16px",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <label style={labelStyle}>Initial Stock</label>
-            <div style={{ ...formGrid, marginTop: "8px" }}>
-              <div>
-                <label style={labelStyle}>Number of Cases</label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 10"
-                  value={newProduct.initialStockCases}
-                  onChange={(e) =>
-                    setNewProduct({
-                      ...newProduct,
-                      initialStockCases: e.target.value,
-                    })
-                  }
-                />
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>Cost Price (per Case) *</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 840"
+                        value={newProduct.costPricePerCase}
+                        onChange={(e) =>
+                          setNewProduct({
+                            ...newProduct,
+                            costPricePerCase: e.target.value,
+                          })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/case
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Total Pieces in One Case *</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 24"
+                      value={newProduct.unitsPerCase}
+                      onChange={(e) =>
+                        setNewProduct({
+                          ...newProduct,
+                          unitsPerCase: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                {newProduct.costPricePerCase && newProduct.unitsPerCase && (
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-muted)",
+                      marginTop: "8px",
+                    }}
+                  >
+                    Cost per piece = ₹
+                    {(
+                      Number(newProduct.costPricePerCase) /
+                      Number(newProduct.unitsPerCase)
+                    ).toFixed(2)}
+                  </p>
+                )}
               </div>
-              {newProduct.soldLoose && (
+
+              {/* MRP */}
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                    color: "var(--warning)",
+                  }}
+                >
+                  🏷 MRP
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>MRP (per Piece) *</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 45"
+                        value={newProduct.mrp}
+                        onChange={(e) =>
+                          setNewProduct({ ...newProduct, mrp: e.target.value })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/piece
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>
+                      MRP (per Case) — Auto Calculated
+                    </label>
+                    <div
+                      style={{
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color:
+                          newProduct.mrp && newProduct.unitsPerCase
+                            ? "var(--warning)"
+                            : "var(--text-muted)",
+                        fontWeight: "600",
+                      }}
+                    >
+                      {newProduct.mrp && newProduct.unitsPerCase
+                        ? `₹${(Number(newProduct.mrp) * Number(newProduct.unitsPerCase)).toLocaleString()} /case`
+                        : "Enter MRP per piece + pieces per case"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Selling Price */}
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                    color: "var(--success)",
+                  }}
+                >
+                  💰 Selling Price
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>Selling Price (per Case) *</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 950"
+                        value={newProduct.sellingPricePerCase}
+                        onChange={(e) =>
+                          setNewProduct({
+                            ...newProduct,
+                            sellingPricePerCase: e.target.value,
+                          })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/case
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>
+                      Selling Price (per Piece) *
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 42"
+                        value={newProduct.sellingPricePerPiece}
+                        onChange={(e) =>
+                          setNewProduct({
+                            ...newProduct,
+                            sellingPricePerPiece: e.target.value,
+                          })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/piece
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {newProduct.sellingPricePerCase &&
+                  newProduct.costPricePerCase && (
+                    <p
+                      style={{
+                        fontSize: "12px",
+                        marginTop: "8px",
+                        color:
+                          Number(newProduct.sellingPricePerCase) >
+                          Number(newProduct.costPricePerCase)
+                            ? "var(--success)"
+                            : "var(--danger)",
+                      }}
+                    >
+                      Margin per case = ₹
+                      {(
+                        Number(newProduct.sellingPricePerCase) -
+                        Number(newProduct.costPricePerCase)
+                      ).toFixed(2)}
+                      {newProduct.unitsPerCase &&
+                        ` | Per piece = ₹${((Number(newProduct.sellingPricePerCase) - Number(newProduct.costPricePerCase)) / Number(newProduct.unitsPerCase)).toFixed(2)}`}
+                    </p>
+                  )}
+              </div>
+
+              {/* Initial Stock */}
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  📊 Initial Stock
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>Number of Cases</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 10"
+                      value={newProduct.initialStockCases}
+                      onChange={(e) =>
+                        setNewProduct({
+                          ...newProduct,
+                          initialStockCases: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Extra Loose Pieces</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 6"
+                      value={newProduct.initialStockLoose}
+                      onChange={(e) =>
+                        setNewProduct({
+                          ...newProduct,
+                          initialStockLoose: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                {newProduct.initialStockCases && newProduct.unitsPerCase && (
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--success)",
+                      marginTop: "8px",
+                    }}
+                  >
+                    Total ={" "}
+                    {Number(newProduct.initialStockCases) *
+                      Number(newProduct.unitsPerCase) +
+                      (Number(newProduct.initialStockLoose) || 0)}{" "}
+                    pieces
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Full Case Only Fields */}
+          {!newProduct.soldLoose && (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                    color: "var(--accent)",
+                  }}
+                >
+                  💼 Case Pricing
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle}>Buying Price (per Case) *</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 500"
+                        value={newProduct.buyingPricePerCase}
+                        onChange={(e) =>
+                          setNewProduct({
+                            ...newProduct,
+                            buyingPricePerCase: e.target.value,
+                          })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/case
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Selling Price (per Case) *</label>
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 580"
+                        value={newProduct.sellingPrice}
+                        onChange={(e) =>
+                          setNewProduct({
+                            ...newProduct,
+                            sellingPrice: e.target.value,
+                          })
+                        }
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        ₹/case
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {newProduct.buyingPricePerCase && newProduct.sellingPrice && (
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      marginTop: "8px",
+                      color:
+                        Number(newProduct.sellingPrice) >
+                        Number(newProduct.buyingPricePerCase)
+                          ? "var(--success)"
+                          : "var(--danger)",
+                    }}
+                  >
+                    Margin per case = ₹
+                    {(
+                      Number(newProduct.sellingPrice) -
+                      Number(newProduct.buyingPricePerCase)
+                    ).toFixed(2)}
+                  </p>
+                )}
+              </div>
+
+              {/* Initial Stock — Cases Only */}
+              <div
+                style={{
+                  padding: "16px",
+                  background: "var(--surface-2)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <p
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "13px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  📊 Initial Stock
+                </p>
                 <div>
-                  <label style={labelStyle}>Extra Loose Units</label>
+                  <label style={labelStyle}>Number of Cases</label>
                   <Input
                     type="number"
-                    placeholder="e.g. 6"
-                    value={newProduct.initialStockLoose}
+                    placeholder="e.g. 10"
+                    value={newProduct.initialStockCases}
                     onChange={(e) =>
                       setNewProduct({
                         ...newProduct,
-                        initialStockLoose: e.target.value,
+                        initialStockCases: e.target.value,
                       })
                     }
                   />
                 </div>
-              )}
-              {newProduct.initialStockCases && newProduct.unitsPerCase && (
-                <p
-                  style={{
-                    gridColumn: "span 2",
-                    fontSize: "12px",
-                    color: "var(--success)",
-                  }}
-                >
-                  Total ={" "}
-                  {Number(newProduct.initialStockCases) *
-                    Number(newProduct.unitsPerCase) +
-                    (newProduct.soldLoose
-                      ? Number(newProduct.initialStockLoose) || 0
-                      : 0)}{" "}
-                  units
-                </p>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
             <Btn onClick={handleAddProduct} color="var(--success)">
@@ -690,13 +1114,15 @@ export default function ProductsPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {/* In table headers */}
                   {[
                     "Product",
                     "Brand",
                     "Category",
-                    "MRP",
-                    "Cost",
-                    "Selling",
+                    "MRP/pc",
+                    "Cost/case",
+                    "Sell/pc",
+                    "Sell/case",
                     "Stock",
                     "Actions",
                   ].map((h) => (
@@ -787,7 +1213,7 @@ export default function ProductsPage() {
                               textDecoration: "line-through",
                             }}
                           >
-                            ₹{product.mrp}
+                            {product.mrp ? `₹${product.mrp}` : "—"}
                           </td>
                           <td
                             style={{
@@ -796,7 +1222,11 @@ export default function ProductsPage() {
                               color: "var(--danger)",
                             }}
                           >
-                            ₹{product.costPrice || "—"}
+                            {product.costPricePerCase
+                              ? `₹${product.costPricePerCase}`
+                              : product.costPrice
+                                ? `₹${product.costPrice}`
+                                : "—"}
                           </td>
                           <td
                             style={{
@@ -806,7 +1236,22 @@ export default function ProductsPage() {
                               fontWeight: "600",
                             }}
                           >
-                            ₹{product.sellingPrice}
+                            {product.sellingPricePerPiece
+                              ? `₹${product.sellingPricePerPiece}`
+                              : product.sellingPrice
+                                ? `₹${product.sellingPrice}`
+                                : "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "12px 16px",
+                              fontSize: "13px",
+                              color: "var(--success)",
+                            }}
+                          >
+                            {product.sellingPricePerCase
+                              ? `₹${product.sellingPricePerCase}`
+                              : "—"}
                           </td>
                           <td style={{ padding: "12px 16px" }}>
                             <p
@@ -868,8 +1313,12 @@ export default function ProductsPage() {
                                     ...product,
                                     category: product.category || "",
                                     mrp: product.mrp || "",
-                                    costPrice: product.costPrice || "",
-                                    sellingPrice: product.sellingPrice || "",
+                                    costPricePerCase:
+                                      product.costPricePerCase || "",
+                                    sellingPricePerPiece:
+                                      product.sellingPricePerPiece || "",
+                                    sellingPricePerCase:
+                                      product.sellingPricePerCase || "",
                                     unitsPerCase: product.unitsPerCase || "",
                                     reorderThreshold:
                                       product.reorderThreshold || 10,
@@ -884,25 +1333,6 @@ export default function ProductsPage() {
                                 Edit
                               </Btn>
                               <Btn
-                                onClick={() =>
-                                  setExpandedProduct(
-                                    expandedProduct === product._id
-                                      ? null
-                                      : product._id,
-                                  )
-                                }
-                                color="var(--border)"
-                                style={{
-                                  padding: "4px 10px",
-                                  fontSize: "11px",
-                                  color: "var(--text)",
-                                }}
-                              >
-                                {expandedProduct === product._id
-                                  ? "Hide"
-                                  : "Variants"}
-                              </Btn>
-                              <Btn
                                 onClick={() => handleDelete(product._id)}
                                 color="var(--danger)"
                                 style={{
@@ -915,165 +1345,6 @@ export default function ProductsPage() {
                             </div>
                           </td>
                         </tr>
-                        {expandedProduct === product._id && (
-                          <tr
-                            style={{
-                              background: "var(--surface-2)",
-                              borderBottom: "1px solid var(--border)",
-                            }}
-                          >
-                            <td colSpan="8" style={{ padding: "16px 24px" }}>
-                              <p
-                                style={{
-                                  fontWeight: "600",
-                                  fontSize: "13px",
-                                  color: "var(--accent)",
-                                  marginBottom: "12px",
-                                }}
-                              >
-                                Variants — {product.name}
-                              </p>
-                              {product.variants.length === 0 ? (
-                                <p
-                                  style={{
-                                    color: "var(--text-muted)",
-                                    fontSize: "13px",
-                                    marginBottom: "12px",
-                                  }}
-                                >
-                                  No variants yet
-                                </p>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "4px",
-                                    marginBottom: "12px",
-                                  }}
-                                >
-                                  {product.variants.map((variant) => (
-                                    <div
-                                      key={variant._id}
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "16px",
-                                        padding: "8px 12px",
-                                        background: "var(--surface)",
-                                        borderRadius: "8px",
-                                        border: "1px solid var(--border)",
-                                      }}
-                                    >
-                                      <span
-                                        style={{
-                                          fontWeight: "500",
-                                          fontSize: "13px",
-                                          flex: 1,
-                                        }}
-                                      >
-                                        {variant.name}
-                                      </span>
-                                      <span
-                                        style={{
-                                          color: "var(--text-muted)",
-                                          fontSize: "13px",
-                                        }}
-                                      >
-                                        {variant.quantity} units
-                                      </span>
-                                      <span
-                                        style={{
-                                          color: "var(--success)",
-                                          fontWeight: "600",
-                                          fontSize: "13px",
-                                        }}
-                                      >
-                                        ₹{variant.price}
-                                      </span>
-                                      <Btn
-                                        onClick={() =>
-                                          handleDeleteVariant(
-                                            product._id,
-                                            variant._id,
-                                          )
-                                        }
-                                        color="var(--danger)"
-                                        style={{
-                                          padding: "3px 8px",
-                                          fontSize: "11px",
-                                        }}
-                                      >
-                                        Delete
-                                      </Btn>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "8px",
-                                  alignItems: "flex-end",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <div>
-                                  <label style={labelStyle}>Variant Name</label>
-                                  <Input
-                                    placeholder="e.g. Full Case"
-                                    value={newVariant.name}
-                                    onChange={(e) =>
-                                      setNewVariant({
-                                        ...newVariant,
-                                        name: e.target.value,
-                                      })
-                                    }
-                                    style={{ width: "140px" }}
-                                  />
-                                </div>
-                                <div>
-                                  <label style={labelStyle}>
-                                    Units per Pack
-                                  </label>
-                                  <Input
-                                    type="number"
-                                    placeholder="e.g. 24"
-                                    value={newVariant.quantity}
-                                    onChange={(e) =>
-                                      setNewVariant({
-                                        ...newVariant,
-                                        quantity: e.target.value,
-                                      })
-                                    }
-                                    style={{ width: "110px" }}
-                                  />
-                                </div>
-                                <div>
-                                  <label style={labelStyle}>Price (₹)</label>
-                                  <Input
-                                    type="number"
-                                    placeholder="e.g. 950"
-                                    value={newVariant.price}
-                                    onChange={(e) =>
-                                      setNewVariant({
-                                        ...newVariant,
-                                        price: e.target.value,
-                                      })
-                                    }
-                                    style={{ width: "110px" }}
-                                  />
-                                </div>
-                                <Btn
-                                  onClick={() => handleAddVariant(product._id)}
-                                  color="var(--accent)"
-                                >
-                                  + Add
-                                </Btn>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </React.Fragment>
                     );
                   })
@@ -1155,84 +1426,128 @@ export default function ProductsPage() {
                     >
                       <div
                         style={{
-                          background: "var(--surface-2)",
-                          borderRadius: "8px",
-                          padding: "8px",
-                          textAlign: "center",
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, 1fr)",
+                          gap: "8px",
+                          marginBottom: "10px",
                         }}
                       >
-                        <p
+                        <div
                           style={{
-                            fontSize: "10px",
-                            color: "var(--text-muted)",
-                            marginBottom: "2px",
+                            background: "var(--surface-2)",
+                            borderRadius: "8px",
+                            padding: "8px",
+                            textAlign: "center",
                           }}
                         >
-                          MRP
-                        </p>
-                        <p
+                          <p
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            MRP/piece
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              textDecoration: "line-through",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {product.mrp ? `₹${product.mrp}` : "—"}
+                          </p>
+                        </div>
+                        <div
                           style={{
-                            fontSize: "13px",
-                            textDecoration: "line-through",
-                            color: "var(--text-muted)",
+                            background: "var(--surface-2)",
+                            borderRadius: "8px",
+                            padding: "8px",
+                            textAlign: "center",
                           }}
                         >
-                          ₹{product.mrp}
-                        </p>
-                      </div>
-                      <div
-                        style={{
-                          background: "var(--surface-2)",
-                          borderRadius: "8px",
-                          padding: "8px",
-                          textAlign: "center",
-                        }}
-                      >
-                        <p
+                          <p
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            Cost/case
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              color: "var(--danger)",
+                              fontWeight: "600",
+                            }}
+                          >
+                            {product.costPricePerCase
+                              ? `₹${product.costPricePerCase}`
+                              : "—"}
+                          </p>
+                        </div>
+                        <div
                           style={{
-                            fontSize: "10px",
-                            color: "var(--text-muted)",
-                            marginBottom: "2px",
+                            background: "var(--surface-2)",
+                            borderRadius: "8px",
+                            padding: "8px",
+                            textAlign: "center",
                           }}
                         >
-                          Cost
-                        </p>
-                        <p
+                          <p
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            Sell/piece
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              color: "var(--success)",
+                              fontWeight: "600",
+                            }}
+                          >
+                            {product.sellingPricePerPiece
+                              ? `₹${product.sellingPricePerPiece}`
+                              : product.sellingPrice
+                                ? `₹${product.sellingPrice}`
+                                : "—"}
+                          </p>
+                        </div>
+                        <div
                           style={{
-                            fontSize: "13px",
-                            color: "var(--danger)",
-                            fontWeight: "600",
+                            background: "var(--surface-2)",
+                            borderRadius: "8px",
+                            padding: "8px",
+                            textAlign: "center",
                           }}
                         >
-                          ₹{product.costPrice || "—"}
-                        </p>
-                      </div>
-                      <div
-                        style={{
-                          background: "var(--surface-2)",
-                          borderRadius: "8px",
-                          padding: "8px",
-                          textAlign: "center",
-                        }}
-                      >
-                        <p
-                          style={{
-                            fontSize: "10px",
-                            color: "var(--text-muted)",
-                            marginBottom: "2px",
-                          }}
-                        >
-                          Selling
-                        </p>
-                        <p
-                          style={{
-                            fontSize: "13px",
-                            color: "var(--success)",
-                            fontWeight: "600",
-                          }}
-                        >
-                          ₹{product.sellingPrice}
-                        </p>
+                          <p
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            Sell/case
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              color: "var(--success)",
+                              fontWeight: "600",
+                            }}
+                          >
+                            {product.sellingPricePerCase
+                              ? `₹${product.sellingPricePerCase}`
+                              : "—"}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -1293,8 +1608,11 @@ export default function ProductsPage() {
                           setRestockForm({
                             quantity: "",
                             unit: "cases",
-                            costPrice: product.costPrice || "",
-                            supplierId: product.primarySupplier || "",
+                            costPrice:
+                              restockModal.costPricePerCase ||
+                              restockModal.costPrice ||
+                              "",
+                            supplierId: restockModal.primarySupplier || "",
                             invoiceNumber: "",
                             invoiceDate: new Date().toISOString().split("T")[0],
                           });
@@ -1322,25 +1640,6 @@ export default function ProductsPage() {
                         ✏️ Edit
                       </Btn>
                       <Btn
-                        onClick={() =>
-                          setExpandedProduct(
-                            expandedProduct === product._id
-                              ? null
-                              : product._id,
-                          )
-                        }
-                        color="var(--border)"
-                        style={{
-                          padding: "8px",
-                          fontSize: "12px",
-                          color: "var(--text)",
-                        }}
-                      >
-                        {expandedProduct === product._id
-                          ? "Hide Variants"
-                          : "🏷 Variants"}
-                      </Btn>
-                      <Btn
                         onClick={() => handleDelete(product._id)}
                         color="var(--danger)"
                         style={{ padding: "8px", fontSize: "12px" }}
@@ -1348,143 +1647,6 @@ export default function ProductsPage() {
                         🗑 Delete
                       </Btn>
                     </div>
-
-                    {/* Variants Expanded */}
-                    {expandedProduct === product._id && (
-                      <div
-                        style={{
-                          marginTop: "12px",
-                          padding: "12px",
-                          background: "var(--surface-2)",
-                          borderRadius: "8px",
-                        }}
-                      >
-                        <p
-                          style={{
-                            fontWeight: "600",
-                            fontSize: "13px",
-                            color: "var(--accent)",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Variants
-                        </p>
-                        {product.variants.length === 0 ? (
-                          <p
-                            style={{
-                              color: "var(--text-muted)",
-                              fontSize: "12px",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            No variants yet
-                          </p>
-                        ) : (
-                          product.variants.map((variant) => (
-                            <div
-                              key={variant._id}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "8px",
-                                background: "var(--surface)",
-                                borderRadius: "6px",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              <p
-                                style={{ fontSize: "13px", fontWeight: "500" }}
-                              >
-                                {variant.name}
-                              </p>
-                              <p
-                                style={{
-                                  fontSize: "12px",
-                                  color: "var(--text-muted)",
-                                }}
-                              >
-                                {variant.quantity} units
-                              </p>
-                              <p
-                                style={{
-                                  fontSize: "13px",
-                                  color: "var(--success)",
-                                  fontWeight: "600",
-                                }}
-                              >
-                                ₹{variant.price}
-                              </p>
-                              <Btn
-                                onClick={() =>
-                                  handleDeleteVariant(product._id, variant._id)
-                                }
-                                color="var(--danger)"
-                                style={{ padding: "3px 8px", fontSize: "11px" }}
-                              >
-                                ×
-                              </Btn>
-                            </div>
-                          ))
-                        )}
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                            marginTop: "8px",
-                          }}
-                        >
-                          <Input
-                            placeholder="Variant Name (e.g. Full Case)"
-                            value={newVariant.name}
-                            onChange={(e) =>
-                              setNewVariant({
-                                ...newVariant,
-                                name: e.target.value,
-                              })
-                            }
-                          />
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "1fr 1fr",
-                              gap: "8px",
-                            }}
-                          >
-                            <Input
-                              type="number"
-                              placeholder="Units per Pack"
-                              value={newVariant.quantity}
-                              onChange={(e) =>
-                                setNewVariant({
-                                  ...newVariant,
-                                  quantity: e.target.value,
-                                })
-                              }
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Price (₹)"
-                              value={newVariant.price}
-                              onChange={(e) =>
-                                setNewVariant({
-                                  ...newVariant,
-                                  price: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <Btn
-                            onClick={() => handleAddVariant(product._id)}
-                            color="var(--accent)"
-                            style={{ width: "100%", padding: "8px" }}
-                          >
-                            + Add Variant
-                          </Btn>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })
@@ -1512,7 +1674,7 @@ export default function ProductsPage() {
               maxWidth: "500px",
               maxHeight: "90vh",
               overflowY: "auto",
-              margin: '0 12px'
+              margin: "0 12px",
             }}
           >
             <p
@@ -1528,11 +1690,20 @@ export default function ProductsPage() {
               {[
                 { label: "Product Name", key: "name", type: "text" },
                 { label: "Brand", key: "brand", type: "text" },
-                { label: "MRP (₹)", key: "mrp", type: "number" },
-                { label: "Cost Price (₹)", key: "costPrice", type: "number" },
+                { label: "MRP per Piece (₹)", key: "mrp", type: "number" },
                 {
-                  label: "Selling Price (₹)",
-                  key: "sellingPrice",
+                  label: "Cost Price per Case (₹)",
+                  key: "costPricePerCase",
+                  type: "number",
+                },
+                {
+                  label: "Selling Price per Piece (₹)",
+                  key: "sellingPricePerPiece",
+                  type: "number",
+                },
+                {
+                  label: "Selling Price per Case (₹)",
+                  key: "sellingPricePerCase",
                   type: "number",
                 },
                 {
@@ -1741,10 +1912,12 @@ export default function ProductsPage() {
                     letterSpacing: "0.05em",
                   }}
                 >
-                  Last Cost Price
+                  Last Cost/Case
                 </p>
                 <p style={{ fontWeight: "600" }}>
-                  ₹{restockModal.costPrice || 0} per unit
+                  ₹
+                  {restockModal.costPricePerCase || restockModal.costPrice || 0}{" "}
+                  per case
                 </p>
               </div>
               <div>

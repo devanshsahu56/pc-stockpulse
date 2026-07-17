@@ -127,10 +127,10 @@ export default function AlertsPage() {
       setRestockForm({
         quantity: "",
         unit: "cases",
-        costPrice: "",
-        supplierId: "",
+        costPrice: product.costPricePerCase || product.costPrice || "",
+        supplierId: product.primarySupplier || "",
         invoiceNumber: "",
-        invoiceDate: "",
+        invoiceDate: new Date().toISOString().split("T")[0],
       });
       fetchProducts();
     } catch (err) {
