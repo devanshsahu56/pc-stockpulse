@@ -1,44 +1,36 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const Sale = require("../models/Sale");
-const Product = require("../models/Product");
-const Customer = require("../models/Customer");
+const Sale = require('../models/Sale');
+const Product = require('../models/Product');
+const Customer = require('../models/Customer');
 
 // FIFO cost calculation
 const calculateFIFOCost = async (product, unitsNeeded) => {
   let remainingUnits = unitsNeeded;
   let totalCost = 0;
 
-  const lots = [...product.lots].sort(
-    (a, b) => new Date(a.receivedAt) - new Date(b.receivedAt),
-  );
+  const lots = [...product.lots].sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
   const updatedLots = [];
 
   for (const lot of lots) {
-    if (remainingUnits <= 0) {
-      updatedLots.push(lot);
-      continue;
-    }
+    if (remainingUnits <= 0) { updatedLots.push(lot); continue; }
+
+    const costPerUnit = lot.costPrice ||
+      (lot.costPricePerCase ? lot.costPricePerCase / (product.unitsPerCase || 1) : 0);
+
     if (lot.quantity <= remainingUnits) {
-      totalCost += lot.quantity * lot.costPrice;
+      totalCost += lot.quantity * costPerUnit;
       remainingUnits -= lot.quantity;
     } else {
-      totalCost += remainingUnits * lot.costPrice;
-      updatedLots.push({
-        ...lot._doc,
-        quantity: lot.quantity - remainingUnits,
-      });
+      totalCost += remainingUnits * costPerUnit;
+      updatedLots.push({ ...lot._doc, quantity: lot.quantity - remainingUnits });
       remainingUnits = 0;
     }
   }
 
-  // Fallback to costPrice or costPricePerCase/unitsPerCase
   if (lots.length === 0) {
-    const costPerUnit =
-      product.costPrice ||
-      (product.costPricePerCase
-        ? product.costPricePerCase / (product.unitsPerCase || 1)
-        : 0);
+    const costPerUnit = product.costPrice ||
+      (product.costPricePerCase ? product.costPricePerCase / (product.unitsPerCase || 1) : 0);
     totalCost = costPerUnit * unitsNeeded;
   }
 
@@ -46,24 +38,18 @@ const calculateFIFOCost = async (product, unitsNeeded) => {
 };
 
 // Create sale
-router.post("/", async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { customerId, isWalkIn, items, notes, paymentStatus, amountPaid } =
-      req.body;
+    const { customerId, isWalkIn, items, notes, paymentStatus, amountPaid } = req.body;
 
     let customer = null;
-    let customerName = "Walk-in Customer";
-    let shopName = "—";
+    let customerName = 'Walk-in Customer';
+    let shopName = '—';
 
     if (!isWalkIn) {
-      if (!customerId)
-        return res.status(400).json({ error: "Customer required" });
-      customer = await Customer.findOne({
-        _id: customerId,
-        ownerId: req.user.userId,
-      });
-      if (!customer)
-        return res.status(404).json({ error: "Customer not found" });
+      if (!customerId) return res.status(400).json({ error: 'Customer required' });
+      customer = await Customer.findOne({ _id: customerId, ownerId: req.user.userId });
+      if (!customer) return res.status(404).json({ error: 'Customer not found' });
       customerName = customer.name;
       shopName = customer.shopName;
     }
@@ -73,39 +59,37 @@ router.post("/", async (req, res) => {
     const processedItems = [];
 
     for (const item of items) {
-      const product = await Product.findOne({
-        _id: item.productId,
-        ownerId: req.user.userId,
-      });
-      if (!product)
-        return res
-          .status(404)
-          .json({ error: `Product not found: ${item.productId}` });
+      const product = await Product.findOne({ _id: item.productId, ownerId: req.user.userId });
+      if (!product) return res.status(404).json({ error: `Product not found: ${item.productId}` });
 
-      let unitsToDeduct = item.quantity;
-      if (item.variantName === "Full Case") {
-        unitsToDeduct =
-          item.quantity * (item.variantQuantity || product.unitsPerCase);
-      }
+      const unitsPerCase = product.unitsPerCase || 1;
+      const isFullCase = item.variantName === 'Full Case';
 
+      // Calculate units to deduct from stock
+      const unitsToDeduct = isFullCase
+        ? item.quantity * unitsPerCase
+        : item.quantity;
+
+      // Check stock
       if (product.stock < unitsToDeduct) {
-        const casesLeft = Math.floor(product.stock / product.unitsPerCase);
-        const looseLeft = product.stock % product.unitsPerCase;
+        const casesLeft = Math.floor(product.stock / unitsPerCase);
+        const looseLeft = product.stock % unitsPerCase;
         return res.status(400).json({
-          error: `Insufficient stock for ${product.name}. Available: ${casesLeft} cases + ${looseLeft} loose`,
+          error: `Insufficient stock for ${product.name}. Available: ${casesLeft} cases + ${looseLeft} loose`
         });
       }
 
-      const { totalCost: itemCost, updatedLots } = await calculateFIFOCost(
-        product,
-        unitsToDeduct,
-      );
-      const costPerUnit =
-        unitsToDeduct > 0 ? itemCost / unitsToDeduct : product.costPrice;
+      // FIFO cost based on units deducted
+      const { totalCost: itemTotalCost, updatedLots } = await calculateFIFOCost(product, unitsToDeduct);
 
+      // Cost per unit for reference
+      const costPerUnit = unitsToDeduct > 0 ? itemTotalCost / unitsToDeduct : 0;
+      const costPerCase = costPerUnit * unitsPerCase;
+
+      // Revenue
       const lineTotal = item.unitPrice * item.quantity;
       let discountAmount = 0;
-      if (item.discountType === "percentage") {
+      if (item.discountType === 'percentage') {
         discountAmount = (lineTotal * item.discountValue) / 100;
       } else {
         discountAmount = item.discountValue || 0;
@@ -115,68 +99,72 @@ router.post("/", async (req, res) => {
       subtotal += lineTotal;
       totalDiscount += discountAmount;
 
-      // In processedItems.push — add sellingPricePerPiece and sellingPricePerCase for reference
       processedItems.push({
         product: product._id,
         productName: product.name,
         brand: product.brand,
-        variantName: item.variantName || "Loose",
-        variantQuantity: item.variantQuantity || 1,
+        variantName: item.variantName || 'Loose',
+        variantQuantity: isFullCase ? unitsPerCase : 1,
+        unitsDeducted: unitsToDeduct,
         quantity: item.quantity,
         costPrice: costPerUnit,
+        costPricePerCase: isFullCase ? costPerCase : null,
+        totalCostForItem: itemTotalCost,
         unitPrice: item.unitPrice,
-        discountType: item.discountType || "flat",
+        discountType: item.discountType || 'flat',
         discountValue: item.discountValue || 0,
         discountAmount,
-        totalPrice,
+        totalPrice
       });
 
+      // Update stock and lots
       await Product.findByIdAndUpdate(
         item.productId,
-        { $inc: { stock: -unitsToDeduct }, $set: { lots: updatedLots } },
-        { returnDocument: "after" },
+        {
+          $inc: { stock: -unitsToDeduct },
+          $set: { lots: updatedLots }
+        },
+        { returnDocument: 'after' }
       );
     }
 
+    // Final totals
     const totalAmount = subtotal - totalDiscount;
-    const totalCost = processedItems.reduce(
-      (sum, item) => sum + item.costPrice * item.quantity,
-      0,
-    );
+    const totalCost = processedItems.reduce((sum, item) => sum + item.totalCostForItem, 0);
     const totalProfit = totalAmount - totalCost;
 
+    // Payment
     let finalAmountPaid = 0;
     let remainingAmount = 0;
-    let finalPaymentStatus = paymentStatus || "paid";
+    let finalPaymentStatus = paymentStatus || 'paid';
 
-    if (finalPaymentStatus === "paid") {
+    if (finalPaymentStatus === 'paid') {
       finalAmountPaid = totalAmount;
       remainingAmount = 0;
-    } else if (finalPaymentStatus === "unpaid") {
+    } else if (finalPaymentStatus === 'unpaid') {
       finalAmountPaid = 0;
       remainingAmount = totalAmount;
-    } else if (finalPaymentStatus === "partial") {
+    } else if (finalPaymentStatus === 'partial') {
       finalAmountPaid = Number(amountPaid) || 0;
       remainingAmount = totalAmount - finalAmountPaid;
     }
 
+    // Update customer purchases
     if (!isWalkIn && customer) {
       await Customer.findByIdAndUpdate(
         customerId,
         { $inc: { totalPurchases: totalAmount } },
-        { returnDocument: "after" },
+        { returnDocument: 'after' }
       );
     }
 
+    // Payment history
     const paymentHistory = [];
     if (finalAmountPaid > 0) {
       paymentHistory.push({
         amount: finalAmountPaid,
         date: new Date(),
-        note:
-          finalPaymentStatus === "paid"
-            ? "Full payment"
-            : "Initial partial payment",
+        note: finalPaymentStatus === 'paid' ? 'Full payment' : 'Initial partial payment'
       });
     }
 
@@ -196,7 +184,7 @@ router.post("/", async (req, res) => {
       remainingAmount,
       paymentStatus: finalPaymentStatus,
       paymentHistory,
-      notes,
+      notes
     });
 
     await sale.save();
@@ -207,41 +195,34 @@ router.post("/", async (req, res) => {
 });
 
 // Add payment
-router.patch("/:id/payment", async (req, res) => {
+router.patch('/:id/payment', async (req, res) => {
   try {
     const { amount, note } = req.body;
-    if (!amount || amount <= 0)
-      return res.status(400).json({ error: "Amount must be positive" });
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount must be positive' });
 
-    const sale = await Sale.findOne({
-      _id: req.params.id,
-      ownerId: req.user.userId,
+    const sale = await Sale.findOne({ _id: req.params.id, ownerId: req.user.userId });
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    if (sale.remainingAmount <= 0) return res.status(400).json({ error: 'Bill already fully paid' });
+    if (amount > sale.remainingAmount) return res.status(400).json({
+      error: `Amount exceeds remaining balance of ₹${sale.remainingAmount}`
     });
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
-    if (sale.remainingAmount <= 0)
-      return res.status(400).json({ error: "Bill already fully paid" });
-    if (amount > sale.remainingAmount)
-      return res
-        .status(400)
-        .json({
-          error: `Amount exceeds remaining balance of ₹${sale.remainingAmount}`,
-        });
 
     sale.amountPaid += Number(amount);
     sale.remainingAmount -= Number(amount);
 
     if (sale.remainingAmount <= 0) {
-      sale.paymentStatus = "paid";
+      sale.paymentStatus = 'paid';
       sale.remainingAmount = 0;
     } else {
-      sale.paymentStatus = "partial";
+      sale.paymentStatus = 'partial';
     }
 
     sale.paymentHistory.push({
       amount: Number(amount),
       date: new Date(),
-      note: note || "Payment received",
+      note: note || 'Payment received'
     });
+
     await sale.save();
     res.json(sale);
   } catch (err) {
@@ -250,25 +231,17 @@ router.patch("/:id/payment", async (req, res) => {
 });
 
 // Convert walk-in to customer
-router.patch("/:id/convert", async (req, res) => {
+router.patch('/:id/convert', async (req, res) => {
   try {
     const { customerId } = req.body;
-    if (!customerId)
-      return res.status(400).json({ error: "Customer ID required" });
+    if (!customerId) return res.status(400).json({ error: 'Customer ID required' });
 
-    const sale = await Sale.findOne({
-      _id: req.params.id,
-      ownerId: req.user.userId,
-    });
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
-    if (!sale.isWalkIn)
-      return res.status(400).json({ error: "Sale already linked to customer" });
+    const sale = await Sale.findOne({ _id: req.params.id, ownerId: req.user.userId });
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    if (!sale.isWalkIn) return res.status(400).json({ error: 'Sale already linked to customer' });
 
-    const customer = await Customer.findOne({
-      _id: customerId,
-      ownerId: req.user.userId,
-    });
-    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    const customer = await Customer.findOne({ _id: customerId, ownerId: req.user.userId });
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
     sale.customer = customer._id;
     sale.customerName = customer.name;
@@ -276,9 +249,7 @@ router.patch("/:id/convert", async (req, res) => {
     sale.isWalkIn = false;
     await sale.save();
 
-    await Customer.findByIdAndUpdate(customerId, {
-      $inc: { totalPurchases: sale.totalAmount },
-    });
+    await Customer.findByIdAndUpdate(customerId, { $inc: { totalPurchases: sale.totalAmount } });
     res.json(sale);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -286,16 +257,16 @@ router.patch("/:id/convert", async (req, res) => {
 });
 
 // Get all sales
-router.get("/", async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { status, startDate, endDate } = req.query;
     let filter = { ownerId: req.user.userId };
 
-    if (status && status !== "all") filter.paymentStatus = status;
+    if (status && status !== 'all') filter.paymentStatus = status;
     if (startDate && endDate) {
       filter.createdAt = {
         $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
       };
     }
 
@@ -307,13 +278,10 @@ router.get("/", async (req, res) => {
 });
 
 // Get single sale
-router.get("/:id", async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const sale = await Sale.findOne({
-      _id: req.params.id,
-      ownerId: req.user.userId,
-    });
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
+    const sale = await Sale.findOne({ _id: req.params.id, ownerId: req.user.userId });
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
     res.json(sale);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -321,11 +289,11 @@ router.get("/:id", async (req, res) => {
 });
 
 // Get sales by customer
-router.get("/customer/:customerId", async (req, res) => {
+router.get('/customer/:customerId', async (req, res) => {
   try {
     const sales = await Sale.find({
       customer: req.params.customerId,
-      ownerId: req.user.userId,
+      ownerId: req.user.userId
     }).sort({ createdAt: -1 });
     res.json(sales);
   } catch (err) {
@@ -333,8 +301,8 @@ router.get("/customer/:customerId", async (req, res) => {
   }
 });
 
-// Reports
-router.get("/reports/summary", async (req, res) => {
+// Reports summary
+router.get('/reports/summary', async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     let filter = { ownerId: req.user.userId };
@@ -342,7 +310,7 @@ router.get("/reports/summary", async (req, res) => {
     if (startDate && endDate) {
       filter.createdAt = {
         $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
       };
     }
 
@@ -354,86 +322,75 @@ router.get("/reports/summary", async (req, res) => {
     const totalDiscount = sales.reduce((sum, s) => sum + s.totalDiscount, 0);
     const totalCollected = sales.reduce((sum, s) => sum + s.amountPaid, 0);
     const totalPending = sales.reduce((sum, s) => sum + s.remainingAmount, 0);
-    const profitMargin =
-      totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0;
+    const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0;
 
+    // Monthly breakdown
     const monthlyMap = {};
-    sales.forEach((sale) => {
-      const month = new Date(sale.createdAt).toLocaleString("en-IN", {
-        month: "short",
-        year: "numeric",
-      });
-      if (!monthlyMap[month])
-        monthlyMap[month] = { revenue: 0, cost: 0, profit: 0, bills: 0 };
+    sales.forEach(sale => {
+      const month = new Date(sale.createdAt).toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+      if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, cost: 0, profit: 0, bills: 0 };
       monthlyMap[month].revenue += sale.totalAmount;
       monthlyMap[month].cost += sale.totalCost || 0;
       monthlyMap[month].profit += sale.totalProfit || 0;
       monthlyMap[month].bills += 1;
     });
 
+    // Product wise breakdown
     const productMap = {};
-    sales.forEach((sale) => {
-      sale.items.forEach((item) => {
+    sales.forEach(sale => {
+      sale.items.forEach(item => {
         if (!productMap[item.productName]) {
           productMap[item.productName] = {
             productName: item.productName,
             brand: item.brand,
             totalQty: 0,
+            totalUnitsDeducted: 0,
             totalRevenue: 0,
             totalCost: 0,
-            totalProfit: 0,
+            totalProfit: 0
           };
         }
+        const itemCost = item.totalCostForItem ||
+          (item.costPrice * (item.unitsDeducted || item.quantity));
         productMap[item.productName].totalQty += item.quantity;
+        productMap[item.productName].totalUnitsDeducted += item.unitsDeducted || 0;
         productMap[item.productName].totalRevenue += item.totalPrice;
-        productMap[item.productName].totalCost +=
-          (item.costPrice || 0) * item.quantity;
-        productMap[item.productName].totalProfit +=
-          item.totalPrice - (item.costPrice || 0) * item.quantity;
+        productMap[item.productName].totalCost += itemCost;
+        productMap[item.productName].totalProfit += item.totalPrice - itemCost;
       });
     });
 
+    // Brand wise breakdown
     const brandMap = {};
-    sales.forEach((sale) => {
-      sale.items.forEach((item) => {
+    sales.forEach(sale => {
+      sale.items.forEach(item => {
         if (!brandMap[item.brand]) {
           brandMap[item.brand] = {
             brand: item.brand,
             totalRevenue: 0,
             totalCost: 0,
             totalProfit: 0,
-            totalQty: 0,
+            totalQty: 0
           };
         }
+        const itemCost = item.totalCostForItem ||
+          (item.costPrice * (item.unitsDeducted || item.quantity));
         brandMap[item.brand].totalRevenue += item.totalPrice;
-        brandMap[item.brand].totalCost += (item.costPrice || 0) * item.quantity;
-        brandMap[item.brand].totalProfit +=
-          item.totalPrice - (item.costPrice || 0) * item.quantity;
+        brandMap[item.brand].totalCost += itemCost;
+        brandMap[item.brand].totalProfit += item.totalPrice - itemCost;
         brandMap[item.brand].totalQty += item.quantity;
       });
     });
 
     res.json({
       summary: {
-        totalRevenue,
-        totalCost,
-        totalProfit,
-        totalDiscount,
-        totalCollected,
-        totalPending,
-        profitMargin,
-        totalBills: sales.length,
+        totalRevenue, totalCost, totalProfit,
+        totalDiscount, totalCollected, totalPending,
+        profitMargin, totalBills: sales.length
       },
-      monthly: Object.entries(monthlyMap).map(([month, data]) => ({
-        month,
-        ...data,
-      })),
-      products: Object.values(productMap).sort(
-        (a, b) => b.totalProfit - a.totalProfit,
-      ),
-      brands: Object.values(brandMap).sort(
-        (a, b) => b.totalProfit - a.totalProfit,
-      ),
+      monthly: Object.entries(monthlyMap).map(([month, data]) => ({ month, ...data })),
+      products: Object.values(productMap).sort((a, b) => b.totalProfit - a.totalProfit),
+      brands: Object.values(brandMap).sort((a, b) => b.totalProfit - a.totalProfit)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

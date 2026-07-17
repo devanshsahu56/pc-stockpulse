@@ -12,8 +12,11 @@ const saleItemSchema = new mongoose.Schema({
   brand: String,
   variantName: String,
   variantQuantity: Number,
-  quantity: { type: Number, required: true },
-  costPrice: { type: Number, default: 0 },
+  unitsDeducted: { type: Number, default: 0 },  // actual units removed from stock
+  quantity: { type: Number, required: true },     // billing quantity (cases or pieces)
+  costPrice: { type: Number, default: 0 },        // cost per piece
+  costPricePerCase: { type: Number, default: 0 }, // cost per case (if full case sale)
+  totalCostForItem: { type: Number, default: 0 }, // total cost for this line item
   unitPrice: { type: Number, required: true },
   discountType: { type: String, enum: ['flat', 'percentage'], default: 'flat' },
   discountValue: { type: Number, default: 0 },

@@ -237,7 +237,7 @@ export default function ProductsPage() {
 
       const upc = Number(newProduct.unitsPerCase);
       const mrpPerCase = Number(newProduct.mrp) * upc;
-      const costPerPiece = Number(newProduct.costPricePerCase) / upc;
+      const costPerPiece = Number(newProduct.costPricePerCase)/upc; 
 
       productData = {
         ...productData,
@@ -247,7 +247,7 @@ export default function ProductsPage() {
         sellingPricePerPiece: Number(newProduct.sellingPricePerPiece),
         sellingPricePerCase: Number(newProduct.sellingPricePerCase),
         costPricePerCase: Number(newProduct.costPricePerCase),
-        costPrice: costPerPiece,
+        costPrice: costPerPiece * upc,
         sellingPrice: Number(newProduct.sellingPricePerPiece),
         // Auto add Full Case variant
         variants: [
