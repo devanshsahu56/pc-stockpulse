@@ -12,7 +12,11 @@ const authMiddleware = require('./middleware/auth');
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'https://wholesalehub-backend-mqby.onrender.com',
+    /\.vercel\.app$/
+  ],
   credentials: true
 }));
 app.use(express.json());
