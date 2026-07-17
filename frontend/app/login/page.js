@@ -153,7 +153,7 @@ export default function LoginPage() {
           <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
               <label style={{ fontSize: '11px', color: '#71717A', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Business Name</label>
-              <Input type="text" placeholder="e.g. P.C. Namkeen"
+              <Input type="text" 
                 value={regBusinessName} onChange={e => setRegBusinessName(e.target.value)}
                 required autoFocus />
             </div>
