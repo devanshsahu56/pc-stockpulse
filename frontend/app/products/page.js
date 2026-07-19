@@ -112,6 +112,9 @@ const categories = [
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterBrand, setFilterBrand] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
@@ -149,22 +152,20 @@ export default function ProductsPage() {
   });
 
   const loadBrands = async () => {
-  try {
-    const res = await productAPI.getAll();
-    const brands = [
-      ...new Set(res.data.map((p) => p.brand).filter(Boolean)),
-    ];
-    localStorage.setItem('savedBrands', JSON.stringify(brands.sort()));
-  } catch (err) {
-    console.error(err);
-  }
-};
+    try {
+      const res = await productAPI.getAll();
+      const brands = [...new Set(res.data.map((p) => p.brand).filter(Boolean))];
+      localStorage.setItem("savedBrands", JSON.stringify(brands.sort()));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-useEffect(() => {
-  fetchProducts();
-  fetchSuppliers();
-  loadBrands();
-}, []);
+  useEffect(() => {
+    fetchProducts();
+    fetchSuppliers();
+    loadBrands();
+  }, []);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -440,6 +441,19 @@ useEffect(() => {
     gridTemplateColumns: "1fr 1fr",
     gap: "12px",
   };
+  const sortedProducts = [...products]
+    .filter((p) => !filterCategory || p.category === filterCategory)
+    .filter((p) => !filterBrand || p.brand === filterBrand)
+    .sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "brand")
+        return (a.brand || "").localeCompare(b.brand || "");
+      if (sortBy === "mrp_asc") return (a.mrp || 0) - (b.mrp || 0);
+      if (sortBy === "mrp_desc") return (b.mrp || 0) - (a.mrp || 0);
+      if (sortBy === "stock_asc") return a.stock - b.stock;
+      if (sortBy === "stock_desc") return b.stock - a.stock;
+      return 0;
+    });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -460,7 +474,7 @@ useEffect(() => {
               marginTop: "2px",
             }}
           >
-            {products.length} products
+            {sortedProducts.length} products
           </p>
         </div>
         <Btn onClick={() => setShowAddForm(!showAddForm)}>
@@ -469,12 +483,124 @@ useEffect(() => {
       </div>
 
       {/* Search */}
-      <Input
-        placeholder="Search products by name or brand..."
-        value={search}
-        onChange={handleSearch}
-        style={{ width: "100%" }}
-      />
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        {/* Search — takes most space */}
+        <Input
+          placeholder="Search products..."
+          value={search}
+          onChange={handleSearch}
+          style={{ flex: 1, minWidth: "200px" }}
+        />
+
+        {/* Filters — compact, right aligned */}
+        <div
+          style={{
+            display: "flex",
+            gap: "6px",
+            alignItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: filterCategory ? "var(--accent)" : "var(--text-muted)",
+              borderRadius: "8px",
+              padding: "6px 8px",
+              fontSize: "12px",
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">Category</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterBrand}
+            onChange={(e) => setFilterBrand(e.target.value)}
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: filterBrand ? "var(--accent)" : "var(--text-muted)",
+              borderRadius: "8px",
+              padding: "6px 8px",
+              fontSize: "12px",
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">Brand</option>
+            {[...new Set(products.map((p) => p.brand).filter(Boolean))]
+              .sort()
+              .map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              color: sortBy !== "name" ? "var(--accent)" : "var(--text-muted)",
+              borderRadius: "8px",
+              padding: "6px 8px",
+              fontSize: "12px",
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            <option value="name">Sort</option>
+            <option value="brand">Brand A→Z</option>
+            <option value="mrp_asc">MRP ↑</option>
+            <option value="mrp_desc">MRP ↓</option>
+            <option value="stock_asc">Stock ↑</option>
+            <option value="stock_desc">Stock ↓</option>
+          </select>
+
+          {/* Clear — only shows when filters active */}
+          {(filterCategory || filterBrand || sortBy !== "name") && (
+            <button
+              onClick={() => {
+                setFilterCategory("");
+                setFilterBrand("");
+                setSortBy("name");
+              }}
+              style={{
+                background: "var(--danger)",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                padding: "6px 8px",
+                fontSize: "12px",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Add Product Form */}
       {showAddForm && (
@@ -1254,7 +1380,7 @@ useEffect(() => {
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 ? (
+                {sortedProducts.length === 0 ? (
                   <tr>
                     <td
                       colSpan="8"
@@ -1268,7 +1394,7 @@ useEffect(() => {
                     </td>
                   </tr>
                 ) : (
-                  products.map((product) => {
+                  sortedProducts.map((product) => {
                     const stockDisplay = getStockDisplay(product);
                     return (
                       <React.Fragment key={product._id}>
@@ -1468,7 +1594,7 @@ useEffect(() => {
             className="mobile-only"
             style={{ display: "flex", flexDirection: "column", gap: "1px" }}
           >
-            {products.length === 0 ? (
+            {sortedProducts.length === 0 ? (
               <p
                 style={{
                   padding: "40px",
@@ -1479,7 +1605,7 @@ useEffect(() => {
                 No products found
               </p>
             ) : (
-              products.map((product) => {
+              sortedProducts.map((product) => {
                 const stockDisplay = getStockDisplay(product);
                 return (
                   <div
