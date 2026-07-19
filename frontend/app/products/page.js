@@ -135,6 +135,8 @@ export default function ProductsPage() {
     initialStockLoose: "",
     reorderThreshold: 10,
   });
+  const [brandSuggestions, setBrandSuggestions] = useState([]);
+  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [restockModal, setRestockModal] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
   const [restockForm, setRestockForm] = useState({
@@ -149,6 +151,23 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts();
     fetchSuppliers();
+    // Load brands from existing products into localStorage
+    const loadBrands = async () => {
+      try {
+        const res = await productAPI.getAll();
+        const brands = [
+          ...new Set(res.data.map((p) => p.brand).filter(Boolean)),
+        ];
+        const existing = JSON.parse(
+          localStorage.getItem("savedBrands") || "[]",
+        );
+        const merged = [...new Set([...existing, ...brands])].sort();
+        localStorage.setItem("savedBrands", JSON.stringify(merged));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadBrands();
   }, []);
 
   const fetchProducts = async () => {
@@ -237,7 +256,7 @@ export default function ProductsPage() {
 
       const upc = Number(newProduct.unitsPerCase);
       const mrpPerCase = Number(newProduct.mrp) * upc;
-      const costPerPiece = Number(newProduct.costPricePerCase)/upc; 
+      const costPerPiece = Number(newProduct.costPricePerCase) / upc;
 
       productData = {
         ...productData,
@@ -286,6 +305,7 @@ export default function ProductsPage() {
 
     try {
       await productAPI.create(productData);
+      saveBrand(newProduct.brand);
       setShowAddForm(false);
       setNewProduct({
         name: "",
@@ -309,7 +329,27 @@ export default function ProductsPage() {
       alert("Error: " + err.response?.data?.error);
     }
   };
+  // Save brand to localStorage
+  const saveBrand = (brand) => {
+    if (!brand.trim()) return;
+    const existing = JSON.parse(localStorage.getItem("savedBrands") || "[]");
+    if (!existing.includes(brand.trim())) {
+      const updated = [...existing, brand.trim()].sort();
+      localStorage.setItem("savedBrands", JSON.stringify(updated));
+    }
+  };
 
+  // Get saved brands
+  const getSavedBrands = () => {
+    return JSON.parse(localStorage.getItem("savedBrands") || "[]");
+  };
+
+  // Filter brands based on input
+  const filterBrands = (input) => {
+    if (!input.trim()) return [];
+    const saved = getSavedBrands();
+    return saved.filter((b) => b.toLowerCase().startsWith(input.toLowerCase()));
+  };
   const handleRestock = async () => {
     if (!restockForm.quantity || Number(restockForm.quantity) <= 0) {
       alert("Enter valid quantity");
@@ -382,6 +422,7 @@ export default function ProductsPage() {
         unitsPerCase: upc,
         reorderThreshold: Number(editProduct.reorderThreshold),
       });
+      saveBrand(editProduct.brand);
       setEditProduct(null);
       fetchProducts();
     } catch (err) {
@@ -471,14 +512,86 @@ export default function ProductsPage() {
               />
             </div>
             <div>
-              <label style={labelStyle}>Brand *</label>
-              <Input
-                placeholder="e.g. Coca-Cola"
-                value={newProduct.brand}
-                onChange={(e) =>
-                  setNewProduct({ ...newProduct, brand: e.target.value })
-                }
-              />
+              <label style={labelStyle}>Brand Name *</label>
+              <div style={{ position: "relative" }}>
+                <Input
+                  placeholder="e.g. Coca-Cola"
+                  value={newProduct.brand}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewProduct({ ...newProduct, brand: val });
+                    const saved = JSON.parse(
+                      localStorage.getItem("savedBrands") || "[]",
+                    );
+                    const filtered = saved.filter((b) =>
+                      b.toLowerCase().startsWith(val.toLowerCase()),
+                    );
+                    setBrandSuggestions(filtered);
+                    setShowBrandDropdown(
+                      filtered.length > 0 && val.trim().length > 0,
+                    );
+                  }}
+                  onFocus={() => {
+                    if (newProduct.brand.trim()) {
+                      const saved = JSON.parse(
+                        localStorage.getItem("savedBrands") || "[]",
+                      );
+                      const filtered = saved.filter((b) =>
+                        b
+                          .toLowerCase()
+                          .startsWith(newProduct.brand.toLowerCase()),
+                      );
+                      setBrandSuggestions(filtered);
+                      setShowBrandDropdown(filtered.length > 0);
+                    }
+                  }}
+                  onBlur={() =>
+                    setTimeout(() => setShowBrandDropdown(false), 150)
+                  }
+                  autoComplete="off"
+                />
+                {showBrandDropdown && brandSuggestions.length > 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      zIndex: 50,
+                      width: "100%",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      marginTop: "4px",
+                      overflow: "hidden",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                    }}
+                  >
+                    {brandSuggestions.map((brand) => (
+                      <div
+                        key={brand}
+                        onMouseDown={() => {
+                          setNewProduct({ ...newProduct, brand });
+                          setShowBrandDropdown(false);
+                          setBrandSuggestions([]);
+                        }}
+                        style={{
+                          padding: "10px 14px",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          borderBottom: "1px solid var(--border)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background =
+                            "var(--surface-2)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "transparent")
+                        }
+                      >
+                        {brand}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label style={labelStyle}>Category</label>
@@ -1719,16 +1832,101 @@ export default function ProductsPage() {
               ].map((field) => (
                 <div key={field.key}>
                   <label style={labelStyle}>{field.label}</label>
-                  <Input
-                    type={field.type}
-                    value={editProduct[field.key] || ""}
-                    onChange={(e) =>
-                      setEditProduct({
-                        ...editProduct,
-                        [field.key]: e.target.value,
-                      })
-                    }
-                  />
+
+                  {/* Brand field gets autocomplete, others get normal input */}
+                  {field.key === "brand" ? (
+                    <div style={{ position: "relative" }}>
+                      <Input
+                        type="text"
+                        value={editProduct.brand || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditProduct({ ...editProduct, brand: val });
+                          const saved = JSON.parse(
+                            localStorage.getItem("savedBrands") || "[]",
+                          );
+                          const filtered = saved.filter((b) =>
+                            b.toLowerCase().startsWith(val.toLowerCase()),
+                          );
+                          setBrandSuggestions(filtered);
+                          setShowBrandDropdown(
+                            filtered.length > 0 && val.trim().length > 0,
+                          );
+                        }}
+                        onFocus={() => {
+                          if (editProduct.brand?.trim()) {
+                            const saved = JSON.parse(
+                              localStorage.getItem("savedBrands") || "[]",
+                            );
+                            const filtered = saved.filter((b) =>
+                              b
+                                .toLowerCase()
+                                .startsWith(editProduct.brand.toLowerCase()),
+                            );
+                            setBrandSuggestions(filtered);
+                            setShowBrandDropdown(filtered.length > 0);
+                          }
+                        }}
+                        onBlur={() =>
+                          setTimeout(() => setShowBrandDropdown(false), 150)
+                        }
+                        autoComplete="off"
+                      />
+                      {showBrandDropdown && brandSuggestions.length > 0 && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            zIndex: 50,
+                            width: "100%",
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            marginTop: "4px",
+                            overflow: "hidden",
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                          }}
+                        >
+                          {brandSuggestions.map((brand) => (
+                            <div
+                              key={brand}
+                              onMouseDown={() => {
+                                setEditProduct({ ...editProduct, brand });
+                                setShowBrandDropdown(false);
+                                setBrandSuggestions([]);
+                              }}
+                              style={{
+                                padding: "10px 14px",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                                borderBottom: "1px solid var(--border)",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background =
+                                  "var(--surface-2)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background =
+                                  "transparent")
+                              }
+                            >
+                              {brand}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Input
+                      type={field.type}
+                      value={editProduct[field.key] || ""}
+                      onChange={(e) =>
+                        setEditProduct({
+                          ...editProduct,
+                          [field.key]: e.target.value,
+                        })
+                      }
+                    />
+                  )}
                 </div>
               ))}
               <div>
@@ -1749,67 +1947,79 @@ export default function ProductsPage() {
               </div>
             </div>
             <div style={{ marginBottom: "16px" }}>
-  <label
-    style={{
-      fontSize: "11px",
-      color: "var(--text-muted)",
-      textTransform: "uppercase",
-      letterSpacing: "0.05em",
-      display: "block",
-      marginBottom: "8px",
-    }}
-  >
-    Selling Type
-  </label>
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: "8px",
-      background: "var(--surface-2)",
-      padding: "4px",
-      borderRadius: "8px",
-      border: "1px solid var(--border)",
-    }}
-  >
-    <button
-      type="button"
-      onClick={() => setEditProduct({ ...editProduct, soldLoose: true })}
-      style={{
-        padding: "8px 12px",
-        borderRadius: "6px",
-        border: "none",
-        fontSize: "13px",
-        fontWeight: "500",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        background: editProduct?.soldLoose ? "var(--accent)" : "transparent",
-        color: editProduct?.soldLoose ? "white" : "var(--text-muted)",
-        transition: "all 0.15s ease",
-      }}
-    >
-      Loose & Full Case
-    </button>
-    <button
-      type="button"
-      onClick={() => setEditProduct({ ...editProduct, soldLoose: false })}
-      style={{
-        padding: "8px 12px",
-        borderRadius: "6px",
-        border: "none",
-        fontSize: "13px",
-        fontWeight: "500",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        background: !editProduct?.soldLoose ? "var(--accent)" : "transparent",
-        color: !editProduct?.soldLoose ? "white" : "var(--text-muted)",
-        transition: "all 0.15s ease",
-      }}
-    >
-      Full Case Only
-    </button>
-  </div>
-</div>
+              <label
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  display: "block",
+                  marginBottom: "8px",
+                }}
+              >
+                Selling Type
+              </label>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "8px",
+                  background: "var(--surface-2)",
+                  padding: "4px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditProduct({ ...editProduct, soldLoose: true })
+                  }
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    border: "none",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    background: editProduct?.soldLoose
+                      ? "var(--accent)"
+                      : "transparent",
+                    color: editProduct?.soldLoose
+                      ? "white"
+                      : "var(--text-muted)",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  Loose & Full Case
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditProduct({ ...editProduct, soldLoose: false })
+                  }
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    border: "none",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    background: !editProduct?.soldLoose
+                      ? "var(--accent)"
+                      : "transparent",
+                    color: !editProduct?.soldLoose
+                      ? "white"
+                      : "var(--text-muted)",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  Full Case Only
+                </button>
+              </div>
+            </div>
             <p
               style={{
                 fontSize: "11px",
