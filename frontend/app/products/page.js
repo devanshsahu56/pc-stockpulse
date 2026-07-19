@@ -148,27 +148,23 @@ export default function ProductsPage() {
     invoiceDate: "",
   });
 
-  useEffect(() => {
-    fetchProducts();
-    fetchSuppliers();
-    // Load brands from existing products into localStorage
-    const loadBrands = async () => {
-      try {
-        const res = await productAPI.getAll();
-        const brands = [
-          ...new Set(res.data.map((p) => p.brand).filter(Boolean)),
-        ];
-        const existing = JSON.parse(
-          localStorage.getItem("savedBrands") || "[]",
-        );
-        const merged = [...new Set([...existing, ...brands])].sort();
-        localStorage.setItem("savedBrands", JSON.stringify(merged));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    loadBrands();
-  }, []);
+  const loadBrands = async () => {
+  try {
+    const res = await productAPI.getAll();
+    const brands = [
+      ...new Set(res.data.map((p) => p.brand).filter(Boolean)),
+    ];
+    localStorage.setItem('savedBrands', JSON.stringify(brands.sort()));
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+useEffect(() => {
+  fetchProducts();
+  fetchSuppliers();
+  loadBrands();
+}, []);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -305,7 +301,6 @@ export default function ProductsPage() {
 
     try {
       await productAPI.create(productData);
-      saveBrand(newProduct.brand);
       setShowAddForm(false);
       setNewProduct({
         name: "",
@@ -384,6 +379,7 @@ export default function ProductsPage() {
         invoiceDate: "",
       });
       fetchProducts();
+      loadBrands();
     } catch (err) {
       alert("Error: " + err.response?.data?.error);
     }
@@ -425,6 +421,7 @@ export default function ProductsPage() {
       saveBrand(editProduct.brand);
       setEditProduct(null);
       fetchProducts();
+      loadBrands();
     } catch (err) {
       alert("Error: " + err.response?.data?.error);
     }
