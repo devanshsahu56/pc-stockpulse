@@ -93,7 +93,7 @@ export default function RootLayout({ children }) {
                     color: "white",
                   }}
                 >
-                  P
+                  PC
                 </div>
                 <span
                   style={{

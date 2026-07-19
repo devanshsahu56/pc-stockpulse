@@ -79,7 +79,7 @@ export default function LoginPage() {
             borderRadius: '14px', display: 'flex', alignItems: 'center',
             justifyContent: 'center', fontSize: '26px', fontWeight: '700',
             color: 'white', margin: '0 auto 14px'
-          }}>W</div>
+          }}>PC</div>
           <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#FAFAFA' }}>
             WholesaleHub
           </h1>
