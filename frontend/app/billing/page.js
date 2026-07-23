@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { customerAPI, productAPI, saleAPI } from "../../lib/api";
+import { getUser } from "../../lib/auth";
 
 const Card = ({ children, style = {} }) => (
   <div
@@ -88,6 +89,7 @@ const labelStyle = {
 };
 
 export default function BillingPage() {
+  const user = getUser();
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -350,11 +352,8 @@ export default function BillingPage() {
             }}
           >
             <h1 style={{ fontSize: "18px", fontWeight: "700", color: "#111" }}>
-              WholesaleHub
+              {user?.businessName || "WholesaleHub"}
             </h1>
-            <p style={{ color: "#666", fontSize: "12px" }}>
-              FMCG Wholesale Management
-            </p>
           </div>
 
           {/* Bill Info */}
@@ -654,7 +653,7 @@ export default function BillingPage() {
               paddingTop: "10px",
             }}
           >
-            Thank you for your business! · WholesaleHub
+            Thank you for your business! · {user?.businessName || 'WholesaleHub'}
           </div>
         </div>
 
